@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+.sx-toast {
+	border: 1px solid #0f766e;
+	--toastify-icon-color-success: #0f766e;
+}
+
+.sx-toast-progress {
+	background: #0f766e !important;
+}
+
+.sx-toast .Toastify__toast-body {
+	color: #0f766e;
+	font-weight: 700;
+}
+
+.sx-toast .Toastify__close-button {
+	color: #0f766e;
+	opacity: 0.9;
+}
