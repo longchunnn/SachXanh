@@ -1,29 +1,29 @@
-import { useState, type FormEvent } from "react";
+import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import { BookOutlined, ReadOutlined } from "@ant-design/icons";
-import { validateRegister, type RegisterFormErrors } from "../utils/validation";
+
+type RegisterFormValues = {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+};
 
 export default function RegisterPage() {
-  const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState<RegisterFormErrors>({});
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RegisterFormValues>({
+    defaultValues: {
+      fullName: "",
+      username: "",
+      email: "",
+      password: "",
+    },
+  });
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const nextErrors = validateRegister({
-      fullName,
-      username,
-      email,
-      password,
-    });
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-  };
+  const onSubmit = () => {};
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -49,7 +49,11 @@ export default function RegisterPage() {
                 Gia nhập không gian lưu giữ tri thức hiện đại của chúng tôi.
               </p>
             </div>
-            <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+            <form
+              className="space-y-5"
+              onSubmit={handleSubmit(onSubmit)}
+              noValidate
+            >
               <div>
                 <label className="block text-xs font-bold text-gray-600 tracking-wider mb-2 uppercase">
                   Họ và tên
@@ -57,12 +61,19 @@ export default function RegisterPage() {
                 <input
                   type="text"
                   placeholder="Ví dụ: Nguyễn Văn A"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
+                  {...register("fullName", {
+                    required: "Vui lòng nhập họ và tên.",
+                    minLength: {
+                      value: 2,
+                      message: "Họ và tên phải có ít nhất 2 ký tự.",
+                    },
+                  })}
                   className="w-full bg-gray-50 border border-transparent focus:border-teal-600 focus:bg-white focus:ring-0 rounded-md px-4 py-3 text-sm text-gray-800 outline-none transition-all"
                 />
-                {errors.fullName ? (
-                  <p className="mt-2 text-xs text-red-600">{errors.fullName}</p>
+                {errors.fullName?.message ? (
+                  <p className="mt-2 text-xs text-red-600">
+                    {errors.fullName.message}
+                  </p>
                 ) : null}
               </div>
               <div>
@@ -72,12 +83,20 @@ export default function RegisterPage() {
                 <input
                   type="text"
                   placeholder="Nhập tên tài khoản"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
+                  {...register("username", {
+                    required: "Vui lòng nhập tài khoản.",
+                    pattern: {
+                      value: /^[a-zA-Z0-9._-]{4,20}$/,
+                      message:
+                        "Tài khoản 4-20 ký tự, chỉ gồm chữ, số, ., _, -.",
+                    },
+                  })}
                   className="w-full bg-gray-50 border border-transparent focus:border-teal-600 focus:bg-white focus:ring-0 rounded-md px-4 py-3 text-sm text-gray-800 outline-none transition-all"
                 />
-                {errors.username ? (
-                  <p className="mt-2 text-xs text-red-600">{errors.username}</p>
+                {errors.username?.message ? (
+                  <p className="mt-2 text-xs text-red-600">
+                    {errors.username.message}
+                  </p>
                 ) : null}
               </div>
               <div>
@@ -87,12 +106,19 @@ export default function RegisterPage() {
                 <input
                   type="email"
                   placeholder="email@sachxanh.com"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  {...register("email", {
+                    required: "Vui lòng nhập email.",
+                    pattern: {
+                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                      message: "Email không đúng định dạng.",
+                    },
+                  })}
                   className="w-full bg-gray-50 border border-transparent focus:border-teal-600 focus:bg-white focus:ring-0 rounded-md px-4 py-3 text-sm text-gray-800 outline-none transition-all"
                 />
-                {errors.email ? (
-                  <p className="mt-2 text-xs text-red-600">{errors.email}</p>
+                {errors.email?.message ? (
+                  <p className="mt-2 text-xs text-red-600">
+                    {errors.email.message}
+                  </p>
                 ) : null}
               </div>
               <div>
@@ -102,12 +128,19 @@ export default function RegisterPage() {
                 <input
                   type="password"
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  {...register("password", {
+                    required: "Vui lòng nhập mật khẩu.",
+                    minLength: {
+                      value: 8,
+                      message: "Mật khẩu phải có ít nhất 8 ký tự.",
+                    },
+                  })}
                   className="w-full bg-gray-50 border border-transparent focus:border-teal-600 focus:bg-white focus:ring-0 rounded-md px-4 py-3 text-sm text-gray-800 outline-none transition-all tracking-widest"
                 />
-                {errors.password ? (
-                  <p className="mt-2 text-xs text-red-600">{errors.password}</p>
+                {errors.password?.message ? (
+                  <p className="mt-2 text-xs text-red-600">
+                    {errors.password.message}
+                  </p>
                 ) : null}
               </div>
               <button

@@ -2,11 +2,12 @@ import { useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import HomePage from "../pages/HomePage";
 import Register from "../pages/Register";
-import Signup from "../pages/Signup";
+import Login from "../pages/Login";
 import SearchPage from "../pages/SearchPage";
 import BookDetailPage from "../pages/BookDetailPage";
 import CartPage from "../pages/CartPage";
 import CheckoutPage from "../pages/CheckoutPage";
+import CheckoutOrderPage from "../pages/CheckoutOrderPage";
 import AccountPage from "../pages/AccountPage.tsx";
 
 function ScrollToTop() {
@@ -25,12 +26,13 @@ export default function AppRoutes() {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<Signup />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/book/:id" element={<BookDetailPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/checkout/:id" element={<CheckoutOrderPage />} />
         <Route path="/account" element={<AccountPage />} />
       </Routes>
     </>

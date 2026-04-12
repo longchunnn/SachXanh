@@ -1,19 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Pagination } from "antd";
-import axiosClient from "../services/axiosClient";
 import { normalizeText } from "../utils/textNormalize";
 import { type BookCardData } from "../components/common/BookCard";
 import BookCard from "../components/common/BookCard";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
 import Find from "../components/common/Find";
-import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { useAppDispatch, useAppSelector } from "../app/hooks";
+import { fetchCatalog } from "../features/books/booksSlice";
 import {
   setDebouncedQuery,
   syncFromParams,
-} from "../store/slices/searchUiSlice";
-import { dedupeBooksById } from "../utils/books";
+} from "../features/searchUi/searchUiSlice";
 
 type DbBook = {
   id: string;
@@ -105,10 +104,10 @@ export default function SearchPage() {
 
   const currentPage = Number.isFinite(page) && page > 0 ? page : 1;
 
-  const [books, setBooks] = useState<DbBook[]>([]);
-  const [reviews, setReviews] = useState<DbReview[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const books = useAppSelector((state) => state.books.books as DbBook[]);
+  const reviews = useAppSelector((state) => state.books.reviews as DbReview[]);
+  const loading = useAppSelector((state) => state.books.loading);
+  const error = useAppSelector((state) => state.books.error);
 
   useEffect(() => {
     const queryValue = searchParams.get("q") || "";
@@ -132,43 +131,9 @@ export default function SearchPage() {
     );
   }, [dispatch, searchParams]);
 
-  // Load all books on mount
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadBooks() {
-      try {
-        setLoading(true);
-        setError("");
-        const [booksResponse, reviewsResponse] = await Promise.all([
-          axiosClient.get("/books"),
-          axiosClient.get("/reviews"),
-        ]);
-        if (!isMounted) return;
-        setBooks(
-          Array.isArray(booksResponse)
-            ? dedupeBooksById(booksResponse as DbBook[])
-            : [],
-        );
-        setReviews(
-          Array.isArray(reviewsResponse) ? (reviewsResponse as DbReview[]) : [],
-        );
-      } catch {
-        if (isMounted) {
-          setError(
-            "Không tải được dữ liệu từ db.json. Vui lòng kiểm tra json-server.",
-          );
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    loadBooks();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    void dispatch(fetchCatalog());
+  }, [dispatch]);
 
   const ratingMap = useMemo(() => {
     const approved = reviews.filter(

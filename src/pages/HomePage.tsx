@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { RightOutlined } from "@ant-design/icons";
 import { Link } from "react-router-dom";
-import axiosClient from "../services/axiosClient";
+import { useAppDispatch, useAppSelector } from "../app/hooks";
+import { fetchCatalog } from "../features/books/booksSlice";
 
 import { type BookCardData } from "../components/common/BookCard";
 import VoucherCard, {
@@ -13,11 +14,9 @@ import BookSlider from "../components/common/BookSlider";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
 import {
-  claimVoucher,
-  getClaimedVouchers,
-  subscribeVoucherUpdates,
-} from "../utils/voucherWallet";
-import { dedupeBooksById } from "../utils/books";
+  claimVoucher as claimVoucherAction,
+  type VoucherWalletItem,
+} from "../features/voucher/voucherSlice";
 import { toast } from "react-toastify";
 
 type DbBook = {
@@ -149,75 +148,30 @@ export function SectionHeader({
 }
 
 export default function HomePage() {
-  const [books, setBooks] = useState<DbBook[]>([]);
-  const [promotions, setPromotions] = useState<DbPromotion[]>([]);
-  const [reviews, setReviews] = useState<DbReview[]>([]);
-  const [claimedVoucherIds, setClaimedVoucherIds] = useState<string[]>([]);
+  const dispatch = useAppDispatch();
+  const books = useAppSelector((state) => state.books.books as DbBook[]);
+  const promotions = useAppSelector(
+    (state) => state.books.promotions as DbPromotion[],
+  );
+  const claimedVouchers = useAppSelector(
+    (state) => state.voucher.claimedVouchers as VoucherWalletItem[],
+  );
+  const claimedVoucherIds = useMemo(
+    () => claimedVouchers.map((item) => item.id),
+    [claimedVouchers],
+  );
+  const reviews = useAppSelector((state) => state.books.reviews as DbReview[]);
   const [isVoucherPopupOpen, setIsVoucherPopupOpen] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<DbPromotion | null>(
     null,
   );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    const syncClaimedVoucherIds = () => {
-      setClaimedVoucherIds(getClaimedVouchers().map((item) => item.id));
-    };
+    void dispatch(fetchCatalog());
+  }, [dispatch]);
 
-    syncClaimedVoucherIds();
-    const unsubscribe = subscribeVoucherUpdates(syncClaimedVoucherIds);
-
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadHomeData() {
-      try {
-        setLoading(true);
-        setError("");
-        const [booksResponse, promotionsResponse, reviewsResponse] =
-          await Promise.all([
-            axiosClient.get("/books"),
-            axiosClient.get("/promotions"),
-            axiosClient.get("/reviews"),
-          ]);
-
-        if (!isMounted) return;
-        setBooks(
-          Array.isArray(booksResponse)
-            ? dedupeBooksById(booksResponse as DbBook[])
-            : [],
-        );
-        setPromotions(
-          Array.isArray(promotionsResponse)
-            ? (promotionsResponse as DbPromotion[])
-            : [],
-        );
-        setReviews(
-          Array.isArray(reviewsResponse) ? (reviewsResponse as DbReview[]) : [],
-        );
-      } catch {
-        if (isMounted) {
-          setError(
-            "Không tải được dữ liệu từ db.json. Vui lòng kiểm tra json-server.",
-          );
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadHomeData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const loading = useAppSelector((state) => state.books.loading);
+  const error = useAppSelector((state) => state.books.error);
 
   const ratingMap = useMemo(() => {
     const approved = reviews.filter(
@@ -307,21 +261,23 @@ export default function HomePage() {
   const vouchers = useMemo(() => allVouchers.slice(0, 7), [allVouchers]);
 
   const handleClaimVoucher = (voucher: VoucherCardData) => {
-    const claimed = claimVoucher({
-      id: voucher.id,
-      code: voucher.code,
-      title: voucher.title,
-      subtitle: voucher.subtitle,
-      discount_percent: voucher.discount_percent,
-      applies_to_categories: voucher.applies_to_categories,
-      voucher_type: voucher.voucher_type || "discount",
-    });
-
-    if (claimed) {
-      toast.success("Đã nhận mã giảm giá thành công");
+    if (claimedVoucherIds.includes(voucher.id)) {
+      return;
     }
 
-    setClaimedVoucherIds(getClaimedVouchers().map((item) => item.id));
+    dispatch(
+      claimVoucherAction({
+        id: voucher.id,
+        code: voucher.code,
+        title: voucher.title,
+        subtitle: voucher.subtitle,
+        discount_percent: voucher.discount_percent,
+        applies_to_categories: voucher.applies_to_categories,
+        voucher_type: voucher.voucher_type || "discount",
+      }),
+    );
+
+    toast.success("Đã nhận mã giảm giá thành công");
   };
 
   const handleOpenVoucherDetails = (voucher: VoucherCardData) => {
@@ -351,7 +307,7 @@ export default function HomePage() {
         <div className="w-full max-w-7xl bg-white border border-gray-100 min-w-0 overflow-hidden shadow-sm">
           {loading ? (
             <div className="p-8 text-sm text-gray-500">
-              Đang tải dữ liệu từ db.json...
+              Đang tải dữ liệu từ backend...
             </div>
           ) : null}
 

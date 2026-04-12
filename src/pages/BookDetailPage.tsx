@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   CloseOutlined,
@@ -6,19 +6,16 @@ import {
   RightOutlined,
   ShoppingCartOutlined,
 } from "@ant-design/icons";
-import axiosClient from "../services/axiosClient";
+import { useAppDispatch, useAppSelector } from "../app/hooks";
+import { fetchBookDetail } from "../features/books/booksSlice";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
 import BookCard, { type BookCardData } from "../components/common/BookCard";
-import {
-  getClaimedVouchersByCategory,
-  type VoucherWalletItem,
-} from "../utils/voucherWallet";
-import { addToCart } from "../utils/cart";
 import { getAccessToken } from "../services/axiosClient";
-import { dedupeBooksById } from "../utils/books";
 import { isJwtExpired } from "../utils/jwt";
 import { toast } from "react-toastify";
+import { addCartItem } from "../features/cart/cartSlice";
+import { type VoucherWalletItem } from "../features/voucher/voucherSlice";
 
 type DbBook = {
   id: string;
@@ -73,80 +70,32 @@ function mapBook(book: DbBook): BookCardData {
 export default function BookDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [book, setBook] = useState<DbBook | null>(null);
-  const [allBooks, setAllBooks] = useState<DbBook[]>([]);
-  const [reviews, setReviews] = useState<DbReview[]>([]);
-  const [claimedVouchers, setClaimedVouchers] = useState<VoucherWalletItem[]>(
-    [],
+  const dispatch = useAppDispatch();
+  const book = useAppSelector(
+    (state) => state.books.currentBook as DbBook | null,
+  );
+  const allBooks = useAppSelector((state) => state.books.books as DbBook[]);
+  const reviews = useAppSelector(
+    (state) => state.books.currentBookReviews as DbReview[],
+  );
+  const claimedVouchers = useAppSelector(
+    (state) => state.voucher.claimedVouchers as VoucherWalletItem[],
   );
   const [quantity, setQuantity] = useState(1);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [galleryState, setGalleryState] = useState<{
+    bookId: string;
+    index: number;
+  }>({ bookId: "", index: 0 });
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const thumbsRef = useRef<HTMLDivElement | null>(null);
   const modalThumbsRef = useRef<HTMLDivElement | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const loading = useAppSelector((state) => state.books.detailLoading);
+  const error = useAppSelector((state) => state.books.detailError);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadDetail() {
-      if (!id) return;
-
-      try {
-        setLoading(true);
-        setError("");
-
-        const [bookResponse, booksResponse, reviewsResponse] =
-          await Promise.all([
-            axiosClient.get(`/books/${id}`),
-            axiosClient.get("/books"),
-            axiosClient.get("/reviews"),
-          ]);
-
-        if (!isMounted) return;
-
-        setBook((bookResponse as unknown as DbBook) || null);
-        setAllBooks(
-          Array.isArray(booksResponse)
-            ? dedupeBooksById(booksResponse as DbBook[])
-            : [],
-        );
-        const filteredReviews = Array.isArray(reviewsResponse)
-          ? (reviewsResponse as DbReview[])
-              .filter(
-                (review) =>
-                  String(review.book_id) === String(id) &&
-                  Number(review.is_approved) === 1,
-              )
-              .sort(
-                (a, b) =>
-                  new Date(b.created_at).getTime() -
-                  new Date(a.created_at).getTime(),
-              )
-          : [];
-
-        setReviews(filteredReviews);
-      } catch {
-        if (isMounted) {
-          setError("Không tải được thông tin sách. Vui lòng thử lại.");
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    loadDetail();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [id]);
-
-  useEffect(() => {
-    if (!book) return;
-    setClaimedVouchers(getClaimedVouchersByCategory(book.category_name));
-  }, [book]);
+    if (!id) return;
+    void dispatch(fetchBookDetail(id));
+  }, [dispatch, id]);
 
   const galleryImages = useMemo(() => {
     if (!book) return [];
@@ -157,23 +106,42 @@ export default function BookDetailPage() {
     return book.cover_image ? [book.cover_image] : [];
   }, [book]);
 
-  useEffect(() => {
-    setActiveImageIndex(0);
-  }, [book?.id]);
+  const currentBookId = book ? String(book.id) : "";
+  const activeImageIndex =
+    currentBookId && galleryState.bookId === currentBookId
+      ? galleryState.index
+      : 0;
 
-  const showPrevImage = () => {
+  const setActiveImageIndex = useCallback(
+    (nextIndex: number | ((prev: number) => number)) => {
+      setGalleryState((prevState) => {
+        const prevIndex =
+          prevState.bookId === currentBookId ? prevState.index : 0;
+        const resolvedIndex =
+          typeof nextIndex === "function" ? nextIndex(prevIndex) : nextIndex;
+
+        return {
+          bookId: currentBookId,
+          index: resolvedIndex,
+        };
+      });
+    },
+    [currentBookId],
+  );
+
+  const showPrevImage = useCallback(() => {
     if (galleryImages.length <= 1) return;
     setActiveImageIndex((prev) =>
       prev === 0 ? galleryImages.length - 1 : prev - 1,
     );
-  };
+  }, [galleryImages.length, setActiveImageIndex]);
 
-  const showNextImage = () => {
+  const showNextImage = useCallback(() => {
     if (galleryImages.length <= 1) return;
     setActiveImageIndex((prev) =>
       prev === galleryImages.length - 1 ? 0 : prev + 1,
     );
-  };
+  }, [galleryImages.length, setActiveImageIndex]);
 
   const scrollThumbs = (direction: "left" | "right") => {
     if (!thumbsRef.current) return;
@@ -206,18 +174,30 @@ export default function BookDetailPage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isGalleryOpen, galleryImages.length]);
+  }, [isGalleryOpen, showNextImage, showPrevImage]);
 
-  const discountVouchers = useMemo(
+  const categoryVouchers = useMemo(
     () =>
-      claimedVouchers.filter((voucher) => voucher.voucher_type !== "freeship"),
-    [claimedVouchers],
+      !book
+        ? []
+        : claimedVouchers.filter(
+            (voucher) =>
+              voucher.applies_to_categories.includes("ALL") ||
+              voucher.applies_to_categories.includes(book.category_name),
+          ),
+    [book, claimedVouchers],
   );
 
-  const freeShipVouchers = useMemo(
+  const categoryDiscountVouchers = useMemo(
     () =>
-      claimedVouchers.filter((voucher) => voucher.voucher_type === "freeship"),
-    [claimedVouchers],
+      categoryVouchers.filter((voucher) => voucher.voucher_type !== "freeship"),
+    [categoryVouchers],
+  );
+
+  const categoryFreeShipVouchers = useMemo(
+    () =>
+      categoryVouchers.filter((voucher) => voucher.voucher_type === "freeship"),
+    [categoryVouchers],
   );
 
   const handleDecrease = () => {
@@ -236,16 +216,18 @@ export default function BookDetailPage() {
       return false;
     }
 
-    addToCart(
-      {
-        id: String(book.id),
-        title: book.title,
-        author: book.author_name,
-        categoryName: book.category_name,
-        unitPrice: book.selling_price,
-        coverSrc: book.cover_image,
-      },
-      quantity,
+    dispatch(
+      addCartItem({
+        item: {
+          id: String(book.id),
+          title: book.title,
+          author: book.author_name,
+          categoryName: book.category_name,
+          unitPrice: book.selling_price,
+          coverSrc: book.cover_image,
+        },
+        quantity,
+      }),
     );
 
     toast.success("Thêm giỏ hàng thành công");
@@ -418,14 +400,14 @@ export default function BookDetailPage() {
                   <p className="text-sm font-semibold text-gray-800">
                     Mã giảm giá hiện có
                   </p>
-                  {discountVouchers.length === 0 ? (
+                  {categoryDiscountVouchers.length === 0 ? (
                     <p className="mt-2 text-sm text-gray-500">
                       Bạn chưa nhận mã giảm giá phù hợp cho thể loại này ở trang
                       chủ.
                     </p>
                   ) : (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {discountVouchers.map((voucher) => (
+                      {categoryDiscountVouchers.map((voucher) => (
                         <span
                           key={voucher.id}
                           className="inline-flex items-center rounded-md bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-600"
@@ -445,10 +427,10 @@ export default function BookDetailPage() {
                     Giao nhanh dự kiến: 2 - 4 ngày • Phí vận chuyển chuẩn:
                     15.000đ
                   </p>
-                  {freeShipVouchers.length > 0 ? (
+                  {categoryFreeShipVouchers.length > 0 ? (
                     <p className="mt-2 text-sm font-medium text-emerald-700">
                       Có mã freeship áp dụng:{" "}
-                      {freeShipVouchers.map((v) => v.code).join(", ")}
+                      {categoryFreeShipVouchers.map((v) => v.code).join(", ")}
                     </p>
                   ) : (
                     <p className="mt-2 text-sm text-gray-500">

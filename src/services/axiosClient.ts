@@ -1,7 +1,20 @@
 import axios from "axios";
 import { isJwtExpired } from "../utils/jwt";
+import { parseJwtPayload } from "../utils/jwt";
+import { getStoreRef } from "../app/storeRef";
+import { clearSession, hydrateSession } from "../features/session/sessionSlice";
+import {
+  clearCart,
+  clearCheckoutSession,
+  setCartItems,
+  setCheckoutSession,
+} from "../features/cart/cartSlice";
+import {
+  clearClaimedVouchers,
+  setClaimedVouchers,
+} from "../features/voucher/voucherSlice";
 
-const DEFAULT_BASE_URL = "http://localhost:8000";
+const DEFAULT_BASE_URL = "http://localhost:8080/api/v1";
 const AUTH_TOKEN_KEY = "access_token";
 
 const baseURL =
@@ -11,23 +24,94 @@ const baseURL =
   DEFAULT_BASE_URL;
 
 export function getAccessToken(): string | null {
+  const store = getStoreRef();
+  const storeToken = (store?.getState() as { session?: { token?: string } })
+    ?.session?.token;
+  if (storeToken) {
+    return isJwtExpired(storeToken) ? null : storeToken;
+  }
+
   try {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token || isJwtExpired(token)) {
+      return null;
+    }
+    return token;
   } catch {
     return null;
   }
 }
 
 export function setAccessToken(token: string | null): void {
+  const store = getStoreRef();
+
   try {
     if (!token) {
       localStorage.removeItem(AUTH_TOKEN_KEY);
-      return;
+    } else {
+      localStorage.setItem(AUTH_TOKEN_KEY, token);
     }
-    localStorage.setItem(AUTH_TOKEN_KEY, token);
   } catch {
     // ignore storage errors (private mode, blocked storage, etc.)
   }
+
+  if (!token || isJwtExpired(token)) {
+    store?.dispatch(clearSession());
+    store?.dispatch(clearCart());
+    store?.dispatch(clearCheckoutSession());
+    store?.dispatch(clearClaimedVouchers());
+    return;
+  }
+
+  const payload = parseJwtPayload(token);
+  const userId = String(payload?.sub ?? "");
+  const fullName =
+    typeof payload?.full_name === "string" ? payload.full_name : "";
+  const username =
+    typeof payload?.username === "string" ? payload.username : "";
+  const displayName = fullName || username;
+
+  const profileFormRaw = localStorage.getItem(
+    `bookstore_profile_form:${userId}`,
+  );
+  const savedAddressesRaw = localStorage.getItem(
+    `bookstore_saved_addresses:${userId}`,
+  );
+  const avatarSrc =
+    localStorage.getItem(`bookstore_profile_avatar:${userId}`) ?? "";
+  const cartItemsRaw = localStorage.getItem(`bookstore_cart_items:${userId}`);
+  const checkoutSessionRaw = localStorage.getItem(
+    `bookstore_checkout_session:${userId}`,
+  );
+  const claimedVouchersRaw = localStorage.getItem(
+    `bookstore_claimed_vouchers:${userId}`,
+  );
+
+  store?.dispatch(
+    hydrateSession({
+      token,
+      userId,
+      displayName,
+      profileForm: profileFormRaw ? JSON.parse(profileFormRaw) : undefined,
+      savedAddresses: savedAddressesRaw
+        ? JSON.parse(savedAddressesRaw)
+        : undefined,
+      avatarSrc,
+      selectedAddressId: undefined,
+    }),
+  );
+
+  store?.dispatch(setCartItems(cartItemsRaw ? JSON.parse(cartItemsRaw) : []));
+  if (checkoutSessionRaw) {
+    store?.dispatch(setCheckoutSession(JSON.parse(checkoutSessionRaw)));
+  } else {
+    store?.dispatch(clearCheckoutSession());
+  }
+  store?.dispatch(
+    setClaimedVouchers(
+      claimedVouchersRaw ? JSON.parse(claimedVouchersRaw) : [],
+    ),
+  );
 }
 
 export function clearAccessToken(): void {

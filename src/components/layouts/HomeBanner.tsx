@@ -3,14 +3,14 @@ import { Flex } from "antd";
 export default function HomeBanner() {
   return (
     <div className="w-full flex justify-center mt-6 px-4">
-      <div className="relative w-full max-w-7xl overflow-hidden min-h-[450px] flex items-center shadow-lg">
+      <div className="relative w-full max-w-7xl overflow-hidden min-h-112.5 flex items-center shadow-lg">
         <div className="absolute inset-0 z-0">
           <img
             src="src\asset\pngtree-sunlit-sanctuary-antique-books-in-a-wooden-library-image_19832214.webp"
             alt="Library Background"
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#093e44] via-[#093e44]/85 to-transparent"></div>
+          <div className="absolute inset-0 bg-linear-to-r from-[#093e44] via-[#093e44]/85 to-transparent"></div>
         </div>
         <div className="relative z-10 p-15 md:p-10 w-full max-w-3xl">
           <span className="inline-block bg-[#7a3911] text-white text-xs font-bold px-4 py-1.5 rounded-4xl mb-6 tracking-wide">

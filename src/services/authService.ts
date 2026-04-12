@@ -1,15 +1,9 @@
 import axiosClient from "./axiosClient";
+import { normalizeLoginResponse, type ApiUser } from "../utils/apiMappers";
 
-export type UserRecord = {
-  id: string;
-  username: string;
-  password: string;
-  role_id: number;
-  full_name: string;
-  email: string;
-  phone?: string;
-  total_points: number;
-  status: number;
+export type LoginResponse = {
+  accessToken: string;
+  user: ApiUser | null;
 };
 
 function normalizeAccount(value: string): string {
@@ -21,7 +15,7 @@ function normalizeAccount(value: string): string {
 export async function loginWithEmailOrUsername(
   identifier: string,
   password: string,
-): Promise<UserRecord> {
+): Promise<LoginResponse> {
   const account = normalizeAccount(identifier);
   const safePassword = String(password || "");
 
@@ -29,21 +23,34 @@ export async function loginWithEmailOrUsername(
     throw new Error("Vui lòng nhập đầy đủ tài khoản và mật khẩu.");
   }
 
-  const query = account.includes("@")
-    ? { email: account, password: safePassword }
-    : { username: account, password: safePassword };
-
-  const users = (await axiosClient.get("/users", {
-    params: query,
-  })) as UserRecord[];
-
-  const user = Array.isArray(users)
-    ? users.find((item) => String(item.status ?? 1) === "1")
-    : null;
-
-  if (!user) {
-    throw new Error("Tài khoản hoặc mật khẩu không đúng.");
+  if (import.meta.env.DEV) {
+    console.log("👀 loginWithEmailOrUsername called:", { identifier: account });
   }
 
-  return user;
+  let response: unknown;
+  try {
+    response = await axiosClient.post("/auth/login", {
+      identifier: account,
+      username: account,
+      email: account,
+      password: safePassword,
+    });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error("❌ loginWithEmailOrUsername failed:", error);
+    }
+    throw error;
+  }
+
+  if (import.meta.env.DEV) {
+    console.log("👀 DỮ LIỆU THẬT MÀ AXIOS NHẬN ĐƯỢC LÀ:", response);
+  }
+
+  const normalized = normalizeLoginResponse(response);
+
+  if (!normalized.accessToken) {
+    throw new Error("Đăng nhập thất bại. Backend không trả về token.");
+  }
+
+  return normalized;
 }

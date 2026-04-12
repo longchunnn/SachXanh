@@ -2,21 +2,26 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
+import ShippingAddressSection from "../components/common/ShippingAddressSection";
 import {
   getDistrictsByProvinceCode,
   getProvinces,
   getWardsByDistrictCode,
-} from "vn-provinces";
-import axiosClient, { getAccessToken } from "../services/axiosClient";
+  type AdministrativeOption,
+} from "../utils/vnAdministrative";
+import { getAccessToken } from "../services/axiosClient";
+import { createOrder } from "../services/ordersService";
+import { useAppDispatch, useAppSelector } from "../app/hooks";
 import {
-  getClaimedVouchers,
-  type VoucherWalletItem,
-} from "../utils/voucherWallet";
-import type { CartItem } from "../utils/cart";
+  clearCheckoutSession as clearCheckoutSessionAction,
+  type CheckoutSession,
+} from "../features/cart/cartSlice";
 import {
-  clearCheckoutSession,
-  getCheckoutSession,
-} from "../utils/checkoutSession";
+  setSavedAddresses,
+  setSelectedAddressId,
+} from "../features/session/sessionSlice";
+import { type VoucherWalletItem } from "../features/voucher/voucherSlice";
+import type { CartItem } from "../features/cart/cartSlice";
 import { parseJwtPayload } from "../utils/jwt";
 
 type ShippingMethod = "standard" | "express";
@@ -24,6 +29,7 @@ type PaymentMethod = "cod" | "prepaid";
 
 type SavedAddress = {
   id: string;
+  isDefault?: boolean;
   fullName: string;
   phone: string;
   addressLine: string;
@@ -37,8 +43,14 @@ type SavedAddress = {
 };
 
 type AddressForm = Omit<SavedAddress, "id">;
+type ShippingField =
+  | "shippingFullName"
+  | "shippingPhone"
+  | "shippingAddressLine"
+  | "shippingProvince"
+  | "shippingDistrict"
+  | "shippingWard";
 
-const SAVED_ADDRESSES_KEY = "bookstore_saved_addresses";
 const ORDER_UPDATED_EVENT = "bookstore:order:updated";
 
 function formatCurrency(value: number): string {
@@ -94,76 +106,40 @@ function getEligibleSubtotalForVoucher(
   return subtotal;
 }
 
-function isValidVietnamPhone(phone: string): boolean {
-  const normalized = phone.replace(/\s+/g, "");
-  return /^0(?:3|5|7|8|9)\d{8}$/.test(normalized);
+function getPreferredAddress(addresses: SavedAddress[]): SavedAddress | null {
+  if (addresses.length === 0) return null;
+  return addresses.find((address) => address.isDefault) ?? addresses[0] ?? null;
 }
 
-function getSavedAddresses(): SavedAddress[] {
-  try {
-    const raw = localStorage.getItem(SAVED_ADDRESSES_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as SavedAddress[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveAddresses(addresses: SavedAddress[]): void {
-  try {
-    localStorage.setItem(SAVED_ADDRESSES_KEY, JSON.stringify(addresses));
-  } catch {
-    // ignore
-  }
-}
-
-function removeSavedAddressById(addressId: string): SavedAddress[] {
-  const current = getSavedAddresses();
-  const next = current.filter((address) => address.id !== addressId);
-  saveAddresses(next);
-  return next;
-}
-
-function getProvinceName(code: string): string {
-  return getProvinces().find((province) => province.code === code)?.name ?? "";
-}
-
-function getDistrictName(provinceCode: string, districtCode: string): string {
-  return (
-    getDistrictsByProvinceCode(provinceCode).find(
-      (district) => district.code === districtCode,
-    )?.name ?? ""
-  );
-}
-
-function getWardName(districtCode: string, wardCode: string): string {
-  return (
-    getWardsByDistrictCode(districtCode).find((ward) => ward.code === wardCode)
-      ?.name ?? ""
-  );
+function findNameByCode(options: AdministrativeOption[], code: string): string {
+  const safeCode = String(code || "").trim();
+  if (!safeCode) return "";
+  return options.find((item) => item.code === safeCode)?.name ?? "";
 }
 
 export default function CheckoutPage() {
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [selectedDiscountId, setSelectedDiscountId] = useState<string | null>(
-    null,
-  );
-  const [selectedFreeShipId, setSelectedFreeShipId] = useState<string | null>(
-    null,
-  );
-  const [claimedVouchers, setClaimedVouchers] = useState<VoucherWalletItem[]>(
-    [],
+  const claimedVouchers = useAppSelector(
+    (state) => state.voucher.claimedVouchers as VoucherWalletItem[],
   );
 
   const [shippingMethod, setShippingMethod] =
     useState<ShippingMethod>("standard");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
+  const checkoutSession = useAppSelector(
+    (state) => state.cart.checkoutSession as CheckoutSession | null,
+  );
 
-  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(
-    null,
+  const items = useMemo(() => checkoutSession?.items ?? [], [checkoutSession]);
+  const selectedDiscountId = checkoutSession?.selectedDiscountId ?? null;
+  const selectedFreeShipId = checkoutSession?.selectedFreeShipId ?? null;
+
+  const savedAddresses = useAppSelector(
+    (state) => state.session.savedAddresses as SavedAddress[],
+  );
+  const selectedAddressId = useAppSelector(
+    (state) => state.session.selectedAddressId,
   );
   const [form, setForm] = useState<AddressForm>({
     fullName: "",
@@ -180,35 +156,69 @@ export default function CheckoutPage() {
   const [addressError, setAddressError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const provinces = useMemo(() => getProvinces(), []);
-  const districts = useMemo(
-    () =>
-      form.provinceCode ? getDistrictsByProvinceCode(form.provinceCode) : [],
-    [form.provinceCode],
-  );
-  const wards = useMemo(
-    () => (form.districtCode ? getWardsByDistrictCode(form.districtCode) : []),
-    [form.districtCode],
-  );
+  const [provinces, setProvinces] = useState<AdministrativeOption[]>([]);
+  const [districts, setDistricts] = useState<AdministrativeOption[]>([]);
+  const [wards, setWards] = useState<AdministrativeOption[]>([]);
 
   useEffect(() => {
-    const session = getCheckoutSession();
-    if (!session || session.items.length === 0) {
-      setItems([]);
-      return;
-    }
-
-    setItems(session.items);
-    setSelectedDiscountId(session.selectedDiscountId);
-    setSelectedFreeShipId(session.selectedFreeShipId);
-    setClaimedVouchers(getClaimedVouchers());
-
-    const addresses = getSavedAddresses();
-    setSavedAddresses(addresses);
-    if (addresses.length > 0) {
-      setSelectedAddressId(addresses[0].id);
-    }
+    let disposed = false;
+    const load = async () => {
+      try {
+        const result = await getProvinces();
+        if (!disposed) setProvinces(result);
+      } catch {
+        if (!disposed) setProvinces([]);
+      }
+    };
+    void load();
+    return () => {
+      disposed = true;
+    };
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    const load = async () => {
+      try {
+        const result = form.provinceCode
+          ? await getDistrictsByProvinceCode(form.provinceCode)
+          : [];
+        if (!disposed) setDistricts(result);
+      } catch {
+        if (!disposed) setDistricts([]);
+      }
+    };
+    void load();
+    return () => {
+      disposed = true;
+    };
+  }, [form.provinceCode]);
+
+  useEffect(() => {
+    let disposed = false;
+    const load = async () => {
+      try {
+        const result = form.districtCode
+          ? await getWardsByDistrictCode(form.districtCode)
+          : [];
+        if (!disposed) setWards(result);
+      } catch {
+        if (!disposed) setWards([]);
+      }
+    };
+    void load();
+    return () => {
+      disposed = true;
+    };
+  }, [form.districtCode]);
+
+  useEffect(() => {
+    if (selectedAddressId) return;
+    if (savedAddresses.length === 0) return;
+    dispatch(
+      setSelectedAddressId(getPreferredAddress(savedAddresses)?.id ?? null),
+    );
+  }, [dispatch, savedAddresses, selectedAddressId]);
 
   const subtotal = useMemo(
     () => items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
@@ -269,70 +279,98 @@ export default function CheckoutPage() {
     [savedAddresses, selectedAddressId],
   );
 
-  const handleSaveAddress = () => {
-    const phone = form.phone.trim();
+  const handleDeleteAddress = (addressId: string) => {
+    const next = savedAddresses.filter((address) => address.id !== addressId);
+    dispatch(setSavedAddresses(next));
 
-    if (!form.fullName.trim() || !phone || !form.addressLine.trim()) {
-      setAddressError(
-        "Vui lòng nhập Tên, Số điện thoại và Địa chỉ trước khi lưu.",
-      );
-      return;
+    if (selectedAddressId === addressId) {
+      dispatch(setSelectedAddressId(getPreferredAddress(next)?.id ?? null));
     }
+  };
 
-    if (!isValidVietnamPhone(phone)) {
-      setAddressError(
-        "Số điện thoại Việt Nam không hợp lệ. Ví dụ: 0912345678.",
-      );
-      return;
-    }
+  const handleSelectSavedAddress = (addressId: string) => {
+    const nextSavedAddresses = savedAddresses.map((address) => ({
+      ...address,
+      isDefault: address.id === addressId,
+    }));
+    const nextSelected = nextSavedAddresses.find(
+      (address) => address.id === addressId,
+    );
+    if (!nextSelected) return;
 
-    if (!form.provinceCode || !form.districtCode || !form.wardCode) {
-      setAddressError(
-        "Vui lòng chọn đầy đủ Tỉnh/Thành, Quận/Huyện và Phường/Xã.",
-      );
-      return;
-    }
-
-    const newAddress: SavedAddress = {
-      id: `${Date.now()}`,
-      fullName: form.fullName.trim(),
-      phone,
-      addressLine: form.addressLine.trim(),
-      provinceCode: form.provinceCode,
-      provinceName: getProvinceName(form.provinceCode),
-      districtCode: form.districtCode,
-      districtName: getDistrictName(form.provinceCode, form.districtCode),
-      wardCode: form.wardCode,
-      wardName: getWardName(form.districtCode, form.wardCode),
-      postalCode: form.postalCode.trim(),
-    };
-
-    const next = [newAddress, ...savedAddresses];
-    setSavedAddresses(next);
-    saveAddresses(next);
-    setSelectedAddressId(newAddress.id);
+    dispatch(setSavedAddresses(nextSavedAddresses));
+    dispatch(setSelectedAddressId(nextSelected.id));
     setAddressError("");
     setForm({
-      fullName: "",
-      phone: "",
-      addressLine: "",
-      provinceCode: "",
-      provinceName: "",
-      districtCode: "",
-      districtName: "",
-      wardCode: "",
-      wardName: "",
-      postalCode: "",
+      fullName: nextSelected.fullName,
+      phone: nextSelected.phone,
+      addressLine: nextSelected.addressLine,
+      provinceCode: nextSelected.provinceCode,
+      provinceName: nextSelected.provinceName,
+      districtCode: nextSelected.districtCode,
+      districtName: nextSelected.districtName,
+      wardCode: nextSelected.wardCode,
+      wardName: nextSelected.wardName,
+      postalCode: nextSelected.postalCode,
     });
   };
 
-  const handleDeleteAddress = (addressId: string) => {
-    const next = removeSavedAddressById(addressId);
-    setSavedAddresses(next);
+  const handleFormFieldChange = (field: keyof AddressForm, value: string) => {
+    setForm((prev) => {
+      if (field === "provinceCode") {
+        return {
+          ...prev,
+          provinceCode: value,
+          provinceName: findNameByCode(provinces, value),
+          districtCode: "",
+          districtName: "",
+          wardCode: "",
+          wardName: "",
+        };
+      }
 
-    if (selectedAddressId === addressId) {
-      setSelectedAddressId(next[0]?.id ?? null);
+      if (field === "districtCode") {
+        return {
+          ...prev,
+          districtCode: value,
+          districtName: findNameByCode(districts, value),
+          wardCode: "",
+          wardName: "",
+        };
+      }
+
+      if (field === "wardCode") {
+        return {
+          ...prev,
+          wardCode: value,
+          wardName: findNameByCode(wards, value),
+        };
+      }
+
+      return {
+        ...prev,
+        [field]: value,
+      };
+    });
+  };
+
+  const handleShippingFieldChange = (field: ShippingField, value: string) => {
+    if (field === "shippingFullName") {
+      handleFormFieldChange("fullName", value);
+      return;
     }
+
+    if (field === "shippingPhone") {
+      handleFormFieldChange("phone", value);
+      return;
+    }
+
+    if (field === "shippingWard") {
+      handleFormFieldChange("wardCode", value);
+      return;
+    }
+
+    handleFormFieldChange("addressLine", value);
   };
 
   const handleCompleteOrder = async () => {
@@ -363,33 +401,43 @@ export default function CheckoutPage() {
           .join(", ")
       : [
           form.addressLine,
-          getWardName(form.districtCode, form.wardCode),
-          getDistrictName(form.provinceCode, form.districtCode),
-          getProvinceName(form.provinceCode),
+          findNameByCode(wards, form.wardCode),
+          findNameByCode(districts, form.districtCode),
+          findNameByCode(provinces, form.provinceCode),
         ]
           .filter(Boolean)
           .join(", ");
 
     const orderPayload = {
       user_id: userId,
+      userId,
       promotion_id: selectedDiscountId ?? selectedFreeShipId ?? null,
+      promotionId: selectedDiscountId ?? selectedFreeShipId ?? null,
       order_date: new Date().toISOString(),
+      orderDate: new Date().toISOString(),
       total_amount: total,
+      totalAmount: total,
       shipping_address: shippingAddress,
+      shippingAddress,
       payment_method: paymentMethod === "cod" ? "COD" : "VNPay",
+      paymentMethod: paymentMethod === "cod" ? "COD" : "VNPay",
       order_status: "Đang xử lý",
+      orderStatus: "Đang xử lý",
       items: items.map((item) => ({
         book_item_id: item.id,
+        bookItemId: item.id,
         title: item.title,
         unit_price: item.unitPrice,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
       })),
     };
 
     try {
-      await axiosClient.post("/orders", orderPayload);
+      await createOrder(orderPayload);
       window.dispatchEvent(new Event(ORDER_UPDATED_EVENT));
     } catch {
-      setAddressError("Không thể lưu đơn hàng vào db.json. Vui lòng thử lại.");
+      setAddressError("Không thể lưu đơn hàng vào backend. Vui lòng thử lại.");
       return;
     }
 
@@ -397,7 +445,7 @@ export default function CheckoutPage() {
     setSuccessMessage(
       "Thanh toán thành công. Đơn hàng của bạn đang được xử lý.",
     );
-    clearCheckoutSession();
+    dispatch(clearCheckoutSessionAction());
   };
 
   if (items.length === 0) {
@@ -431,168 +479,55 @@ export default function CheckoutPage() {
               <h2 className="text-xl font-bold text-teal-900">
                 1. Địa chỉ giao hàng
               </h2>
-              <button
-                type="button"
-                onClick={handleSaveAddress}
-                className="rounded-md bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-800"
-              >
-                + Lưu địa chỉ
-              </button>
             </div>
 
-            {savedAddresses.length > 0 ? (
-              <div className="mb-4 space-y-2 border border-gray-200 bg-gray-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Địa chỉ đã lưu
-                </p>
-                {savedAddresses.map((address) => (
-                  <div
-                    key={address.id}
-                    className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-white"
-                  >
-                    <label className="flex flex-1 cursor-pointer items-start gap-2">
-                      <input
-                        type="radio"
-                        name="saved-address"
-                        checked={selectedAddressId === address.id}
-                        onChange={() => setSelectedAddressId(address.id)}
-                        className="mt-1 h-4 w-4 accent-teal-700"
-                      />
-                      <span className="text-sm text-gray-700">
-                        <strong>{address.fullName}</strong> - {address.phone}
-                        <br />
-                        {address.addressLine}
-                        {address.wardName ? `, ${address.wardName}` : ""}
-                        {address.districtName
-                          ? `, ${address.districtName}`
-                          : ""}
-                        {address.provinceName
-                          ? `, ${address.provinceName}`
-                          : ""}
-                        {address.postalCode ? ` (${address.postalCode})` : ""}
-                      </span>
-                    </label>
+            <ShippingAddressSection
+              form={{
+                shippingFullName: form.fullName,
+                shippingPhone: form.phone,
+                shippingAddressLine: form.addressLine,
+                shippingProvince: form.provinceCode,
+                shippingDistrict: form.districtCode,
+                shippingWard: form.wardCode,
+              }}
+              formErrors={{}}
+              isProfileSaved={false}
+              savedAddresses={savedAddresses}
+              selectedAddressId={selectedAddressId}
+              provinces={provinces}
+              districts={districts}
+              wards={wards}
+              onAddNewAddress={() => {
+                setAddressError("");
+                setForm({
+                  fullName: "",
+                  phone: "",
+                  addressLine: "",
+                  provinceCode: "",
+                  provinceName: "",
+                  districtCode: "",
+                  districtName: "",
+                  wardCode: "",
+                  wardName: "",
+                  postalCode: "",
+                });
+              }}
+              onSelectSavedAddress={handleSelectSavedAddress}
+              onDeleteSavedAddress={handleDeleteAddress}
+              onFormFieldChange={handleShippingFieldChange}
+              onShippingProvinceChange={(provinceCode) =>
+                handleFormFieldChange("provinceCode", provinceCode)
+              }
+              onShippingDistrictChange={(districtCode) =>
+                handleFormFieldChange("districtCode", districtCode)
+              }
+              isAddressFormVisible={true}
+              showHeader={false}
+              showAddButton={false}
+              showDeleteButton={false}
+              showAddressForm={false}
+            />
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteAddress(address.id)}
-                      className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-rose-200 bg-rose-50 px-3 text-xs font-semibold text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-100 hover:text-rose-700"
-                    >
-                      Xoá
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <input
-                value={form.fullName}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, fullName: event.target.value }))
-                }
-                placeholder="Tên của bạn"
-                className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-teal-600"
-              />
-              <input
-                value={form.phone}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, phone: event.target.value }))
-                }
-                placeholder="Số điện thoại Việt Nam"
-                className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-teal-600"
-              />
-              <input
-                value={form.addressLine}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    addressLine: event.target.value,
-                  }))
-                }
-                placeholder="Số nhà, tên đường, phường/xã"
-                className="md:col-span-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-teal-600"
-              />
-              <select
-                value={form.provinceCode}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    provinceCode: event.target.value,
-                    provinceName: getProvinceName(event.target.value),
-                    districtCode: "",
-                    districtName: "",
-                    wardCode: "",
-                    wardName: "",
-                  }))
-                }
-                className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-teal-600"
-              >
-                <option value="">Tỉnh / Thành phố</option>
-                {provinces.map((province) => (
-                  <option key={province.code} value={province.code}>
-                    {province.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={form.districtCode}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    districtCode: event.target.value,
-                    districtName: getDistrictName(
-                      prev.provinceCode,
-                      event.target.value,
-                    ),
-                    wardCode: "",
-                    wardName: "",
-                  }))
-                }
-                disabled={!form.provinceCode}
-                className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-teal-600 disabled:cursor-not-allowed disabled:bg-gray-100"
-              >
-                <option value="">Quận / Huyện</option>
-                {districts.map((district) => (
-                  <option key={district.code} value={district.code}>
-                    {district.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={form.wardCode}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    wardCode: event.target.value,
-                    wardName: getWardName(
-                      prev.districtCode,
-                      event.target.value,
-                    ),
-                  }))
-                }
-                disabled={!form.districtCode}
-                className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-teal-600 disabled:cursor-not-allowed disabled:bg-gray-100"
-              >
-                <option value="">Phường / Xã</option>
-                {wards.map((ward) => (
-                  <option key={ward.code} value={ward.code}>
-                    {ward.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={form.postalCode}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    postalCode: event.target.value,
-                  }))
-                }
-                placeholder="Mã bưu điện"
-                className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-teal-600"
-              />
-            </div>
             <p className="mt-2 text-xs text-gray-500">
               Số điện thoại hợp lệ: 10 số, bắt đầu bằng 03, 05, 07, 08 hoặc 09.
             </p>

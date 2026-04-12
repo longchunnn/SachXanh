@@ -2,7 +2,8 @@ import ImageFrame from "../common/ImageFrame";
 import { ShoppingCartOutlined } from "@ant-design/icons";
 import { Link, useNavigate } from "react-router-dom";
 import { getAccessToken } from "../../services/axiosClient";
-import { addToCart } from "../../utils/cart";
+import { useAppDispatch } from "../../app/hooks";
+import { addCartItem } from "../../features/cart/cartSlice";
 import { isJwtExpired } from "../../utils/jwt";
 import { toast } from "react-toastify";
 
@@ -24,6 +25,7 @@ type Props = {
 };
 
 export default function BookCard({ data }: Props) {
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
   const safeRating =
@@ -39,16 +41,18 @@ export default function BookCard({ data }: Props) {
     }
 
     const fallbackPrice = Number(String(data.price).replace(/[^\d]/g, "")) || 0;
-    addToCart(
-      {
-        id: data.id,
-        title: data.title,
-        author: data.author,
-        categoryName: data.categoryName,
-        coverSrc: data.coverSrc,
-        unitPrice: data.unitPrice ?? fallbackPrice,
-      },
-      1,
+    dispatch(
+      addCartItem({
+        item: {
+          id: data.id,
+          title: data.title,
+          author: data.author,
+          categoryName: data.categoryName,
+          coverSrc: data.coverSrc,
+          unitPrice: data.unitPrice ?? fallbackPrice,
+        },
+        quantity: 1,
+      }),
     );
 
     toast.success("Thêm giỏ hàng thành công");

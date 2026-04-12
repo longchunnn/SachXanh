@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Flex, Input, Badge } from "antd";
 import {
@@ -6,75 +6,51 @@ import {
   UserOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { getAccessToken } from "../../services/axiosClient";
-import { isJwtExpired } from "../../utils/jwt";
-import { getCartCount, subscribeCartUpdates } from "../../utils/cart";
+import { useAppSelector } from "../../app/hooks";
 import logoImage from "../../asset/logo.jpg";
 
 type HeaderProps = {
   hideSearch?: boolean;
 };
 
-export default function Header({ hideSearch = false }: HeaderProps) {
+type SearchBarProps = {
+  isCartPage: boolean;
+  pathname: string;
+  search: string;
+};
+
+function SearchBar({ isCartPage, pathname, search }: SearchBarProps) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [searchInput, setSearchInput] = useState("");
-  const [cartCount, setCartCount] = useState(0);
+  const initialQuery = new URLSearchParams(search).get("q") ?? "";
+  const [searchInput, setSearchInput] = useState(initialQuery);
 
-  const isCartPage = location.pathname.startsWith("/cart");
-  const displayCartCount = isAuthenticated ? cartCount : 0;
+  const navigateBySearch = useCallback(
+    (rawKeyword: string) => {
+      const keyword = rawKeyword.trim();
 
-  useEffect(() => {
-    const syncAuthState = () => {
-      const token = getAccessToken();
-      setIsAuthenticated(Boolean(token && !isJwtExpired(token)));
-    };
+      if (!keyword) {
+        if (isCartPage) {
+          const cartTarget = "/cart";
+          if (`${pathname}${search}` !== cartTarget) {
+            navigate(cartTarget);
+          }
+          return;
+        }
 
-    syncAuthState();
-    window.addEventListener("storage", syncAuthState);
-
-    return () => {
-      window.removeEventListener("storage", syncAuthState);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncCartCount = () => setCartCount(getCartCount());
-    syncCartCount();
-    const unsubscribe = subscribeCartUpdates(syncCartCount);
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const query = new URLSearchParams(location.search).get("q") ?? "";
-    setSearchInput((prev) => (prev === query ? prev : query));
-  }, [location.search]);
-
-  const navigateBySearch = (rawKeyword: string) => {
-    const keyword = rawKeyword.trim();
-
-    if (!keyword) {
-      if (isCartPage) {
-        const cartTarget = "/cart";
-        if (`${location.pathname}${location.search}` !== cartTarget) {
-          navigate(cartTarget);
+        if (pathname.startsWith("/search")) {
+          return;
         }
         return;
       }
 
-      if (location.pathname.startsWith("/search")) {
-        return;
+      const target = `${isCartPage ? "/cart" : "/search"}?q=${encodeURIComponent(keyword)}`;
+
+      if (`${pathname}${search}` !== target) {
+        navigate(target);
       }
-      return;
-    }
-
-    const target = `${isCartPage ? "/cart" : "/search"}?q=${encodeURIComponent(keyword)}`;
-
-    if (`${location.pathname}${location.search}` !== target) {
-      navigate(target);
-    }
-  };
+    },
+    [isCartPage, navigate, pathname, search],
+  );
 
   // Debounce search - 500ms delay before navigating
   useEffect(() => {
@@ -83,7 +59,7 @@ export default function Header({ hideSearch = false }: HeaderProps) {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchInput, isCartPage]);
+  }, [navigateBySearch, searchInput]);
 
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -91,9 +67,68 @@ export default function Header({ hideSearch = false }: HeaderProps) {
     }
   };
 
+  const handleResetSearch = () => {
+    setSearchInput("");
+
+    if (isCartPage) {
+      navigate("/cart");
+      return;
+    }
+
+    if (pathname.startsWith("/search")) {
+      navigate("/search");
+    }
+  };
+
   return (
-    // 1. LỚP VỎ NGOÀI CÙNG: Trải dài 100% màn hình, chứa nền trắng và đổ bóng.
-    // Thêm flex và justify-center để nội dung bên trong tự động chui vào giữa.
+    <div className="hidden w-full max-w-xl items-center gap-2 md:flex">
+      <div className="flex-1">
+        <Input
+          size="large"
+          placeholder={
+            isCartPage
+              ? "Tìm kiếm trong giỏ hàng..."
+              : "Tìm kiếm sách, tác giả, văn phòng phẩm..."
+          }
+          prefix={<SearchOutlined className="mr-2 text-gray-400" />}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={handleSearch}
+          className="
+            rounded-full px-6 py-2 bg-gray-50
+            hover:border-teal-700! 
+            focus-within:border-teal-700! 
+            focus-within:bg-white!
+            focus-within:shadow-[0_0_0_2px_rgba(15,118,110,0.2)]!
+          "
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleResetSearch}
+        aria-label="Reset tìm kiếm"
+        title="Reset tìm kiếm"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:border-teal-600 hover:bg-teal-50 hover:text-teal-700"
+      >
+        <SearchOutlined />
+      </button>
+    </div>
+  );
+}
+
+export default function Header({ hideSearch = false }: HeaderProps) {
+  const location = useLocation();
+  const isAuthenticated = useAppSelector((state) =>
+    Boolean(state.session.token),
+  );
+  const cartCount = useAppSelector((state) =>
+    state.cart.items.reduce((sum, item) => sum + item.quantity, 0),
+  );
+  const isCartPage = location.pathname.startsWith("/cart");
+  const displayCartCount = isAuthenticated ? cartCount : 0;
+
+  return (
     <div className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-50 flex justify-center h-20">
       {/* 2. LỚP LÕI BÊN TRONG: Khống chế chiều rộng tối đa bằng max-w-7xl */}
       <Flex
@@ -101,7 +136,6 @@ export default function Header({ hideSearch = false }: HeaderProps) {
         justify="space-between"
         className="w-full max-w-7xl px-4 md:px-8"
       >
-        {/* LOGO: Sách Xanh */}
         <Link to="/" className="inline-flex items-center">
           <img
             src={logoImage}
@@ -112,27 +146,12 @@ export default function Header({ hideSearch = false }: HeaderProps) {
 
         {/* THANH TÌM KIẾM */}
         {!hideSearch ? (
-          <div className="w-full max-w-xl hidden md:block">
-            <Input
-              size="large"
-              placeholder={
-                isCartPage
-                  ? "Tìm kiếm trong giỏ hàng..."
-                  : "Tìm kiếm sách, tác giả, văn phòng phẩm..."
-              }
-              prefix={<SearchOutlined className="text-gray-400 mr-2" />}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={handleSearch}
-              className="
-                rounded-full px-6 py-2 bg-gray-50
-                hover:border-teal-700! 
-                focus-within:border-teal-700! 
-                focus-within:bg-white!
-                focus-within:shadow-[0_0_0_2px_rgba(15,118,110,0.2)]!
-              "
-            />
-          </div>
+          <SearchBar
+            key={`${location.pathname}${location.search}`}
+            isCartPage={isCartPage}
+            pathname={location.pathname}
+            search={location.search}
+          />
         ) : (
           <div className="hidden md:block md:flex-1" />
         )}

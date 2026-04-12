@@ -1,10 +1,10 @@
 import { useRef } from "react";
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { SectionHeader } from "../../pages/HomePage";
-import BookCard from "./BookCard";
+import BookCard, { type BookCardData } from "./BookCard";
 type Props = {
   title: string;
-  books: any[];
+  books: BookCardData[];
   viewAllTo?: string;
 };
 

@@ -1,45 +1,44 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRightOutlined, BookOutlined } from "@ant-design/icons";
-import { validateSignup, type SignupFormErrors } from "../utils/validation";
 import { loginWithEmailOrUsername } from "../services/authService";
 import { setAccessToken } from "../services/axiosClient";
-import { createMockJwt } from "../utils/jwt";
 import { toast } from "react-toastify";
+import { useForm } from "react-hook-form";
+
+type LoginFormValues = {
+  account: string;
+  password: string;
+  remember: boolean;
+};
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [account, setAccount] = useState("");
-  const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
-  const [errors, setErrors] = useState<SignupFormErrors>({});
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    defaultValues: {
+      account: "",
+      password: "",
+      remember: false,
+    },
+  });
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const onSubmit = async (values: LoginFormValues) => {
     setSubmitError("");
-
-    const nextErrors = validateSignup({ account, password });
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
 
     try {
       setIsSubmitting(true);
-      const user = await loginWithEmailOrUsername(account, password);
-      const token = createMockJwt(
-        {
-          sub: user.id,
-          username: user.username,
-          full_name: user.full_name,
-          role_id: user.role_id,
-        },
-        remember ? 60 * 60 * 24 * 7 : 60 * 60 * 4,
+      const response = await loginWithEmailOrUsername(
+        values.account,
+        values.password,
       );
 
-      setAccessToken(token);
+      setAccessToken(response.accessToken);
       toast.success("Đăng nhập thành công");
       navigate("/");
     } catch (error) {
@@ -93,7 +92,11 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+          <form
+            className="space-y-6"
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
+          >
             <div>
               <label className="block text-xs font-semibold text-gray-500 tracking-wider mb-2 uppercase">
                 Tài khoản
@@ -101,12 +104,32 @@ export default function LoginPage() {
               <input
                 type="text"
                 placeholder="Nhập tài khoản"
-                value={account}
-                onChange={(event) => setAccount(event.target.value)}
+                {...register("account", {
+                  required: "Vui lòng nhập tài khoản.",
+                  validate: (value) => {
+                    const normalized = String(value || "").trim();
+                    if (!normalized) return "Vui lòng nhập tài khoản.";
+
+                    const isUsername = /^[a-zA-Z0-9._-]{4,20}$/.test(
+                      normalized,
+                    );
+                    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                      normalized,
+                    );
+
+                    return (
+                      isUsername ||
+                      isEmail ||
+                      "Vui lòng nhập username (4-20 ký tự) hoặc email hợp lệ."
+                    );
+                  },
+                })}
                 className="w-full bg-gray-50 border border-transparent focus:border-teal-600 focus:bg-white focus:ring-0 rounded-md px-4 py-3 text-sm text-gray-800 outline-none transition-all"
               />
-              {errors.account ? (
-                <p className="mt-2 text-xs text-red-600">{errors.account}</p>
+              {errors.account?.message ? (
+                <p className="mt-2 text-xs text-red-600">
+                  {errors.account.message}
+                </p>
               ) : null}
             </div>
             <div>
@@ -124,20 +147,26 @@ export default function LoginPage() {
               <input
                 type="password"
                 placeholder="••••••••"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                {...register("password", {
+                  required: "Vui lòng nhập mật khẩu.",
+                  minLength: {
+                    value: 6,
+                    message: "Mật khẩu phải có ít nhất 6 ký tự.",
+                  },
+                })}
                 className="w-full bg-gray-50 border border-transparent focus:border-teal-600 focus:bg-white focus:ring-0 rounded-md px-4 py-3 text-sm text-gray-800 outline-none transition-all tracking-widest"
               />
-              {errors.password ? (
-                <p className="mt-2 text-xs text-red-600">{errors.password}</p>
+              {errors.password?.message ? (
+                <p className="mt-2 text-xs text-red-600">
+                  {errors.password.message}
+                </p>
               ) : null}
             </div>
             <div className="flex items-center gap-3">
               <input
                 type="checkbox"
                 id="remember"
-                checked={remember}
-                onChange={(event) => setRemember(event.target.checked)}
+                {...register("remember")}
                 className="w-4 h-4 text-teal-700 border-gray-300 rounded focus:ring-teal-600 cursor-pointer"
               />
               <label

@@ -1,4 +1,4 @@
-import clsx from 'clsx';
+import clsx from "clsx";
 
 type Props = {
   src?: string;
@@ -12,11 +12,11 @@ export default function ImageFrame({
   src,
   alt,
   className,
-  roundedClassName = 'rounded-xl',
-  heightClassName = 'h-52',
+  roundedClassName = "rounded-xl",
+  heightClassName = "h-52",
 }: Props) {
   const wrapperClass = clsx(
-    'relative w-full overflow-hidden bg-gray-100 border border-gray-200',
+    "relative w-full overflow-hidden bg-gray-100 border border-gray-200",
     roundedClassName,
     heightClassName,
     className,
@@ -25,7 +25,7 @@ export default function ImageFrame({
   if (!src) {
     return (
       <div className={wrapperClass}>
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200" />
+        <div className="absolute inset-0 bg-linear-to-br from-gray-100 to-gray-200" />
         <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-gray-500">
           Ảnh (placeholder)
         </div>
@@ -35,7 +35,7 @@ export default function ImageFrame({
 
   return (
     <div className={wrapperClass}>
-      <img src={src} alt={alt ?? ''} className="w-full h-full object-cover" />
+      <img src={src} alt={alt ?? ""} className="w-full h-full object-cover" />
     </div>
   );
 }

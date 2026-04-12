@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckOutlined, DeleteOutlined } from "@ant-design/icons";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
-import { getClaimedVouchers, type VoucherWalletItem } from "../utils/voucherWallet";
-import { getCartItems, removeFromCart, subscribeCartUpdates, updateCartQuantity, type CartItem } from "../utils/cart";
+import { type VoucherWalletItem } from "../features/voucher/voucherSlice";
+import { useAppDispatch, useAppSelector } from "../app/hooks";
+import {
+  removeFromCart as removeCartItem,
+  setCheckoutSession,
+  type CartItem,
+  updateCartItemQuantity,
+} from "../features/cart/cartSlice";
 import { normalizeText } from "../utils/textNormalize";
-import { saveCheckoutSession } from "../utils/checkoutSession";
-
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("vi-VN", {
@@ -82,11 +86,12 @@ function getEligibleSubtotalForVoucher(
 }
 
 export default function CartPage() {
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [claimedVouchers, setClaimedVouchers] = useState<VoucherWalletItem[]>(
-    [],
+  const items = useAppSelector((state) => state.cart.items as CartItem[]);
+  const claimedVouchers = useAppSelector(
+    (state) => state.voucher.claimedVouchers as VoucherWalletItem[],
   );
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(
     new Set(),
@@ -98,39 +103,22 @@ export default function CartPage() {
     null,
   );
 
-  useEffect(() => {
-    const sync = () => setItems(getCartItems());
-    sync();
-    const unsubscribe = subscribeCartUpdates(sync);
-    return unsubscribe;
-  }, []);
+  const itemIdSet = useMemo(
+    () => new Set(items.map((item) => item.id)),
+    [items],
+  );
 
-  useEffect(() => {
-    const syncVouchers = () => setClaimedVouchers(getClaimedVouchers());
-    syncVouchers();
+  const effectiveSelectedItemIds = useMemo(() => {
+    if (items.length === 0) return new Set<string>();
 
-    const onFocus = () => syncVouchers();
-    window.addEventListener("focus", onFocus);
+    if (selectedItemIds.size === 0) {
+      return new Set(items.map((item) => item.id));
+    }
 
-    return () => {
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
-
-  useEffect(() => {
-    setSelectedItemIds((prev) => {
-      if (items.length === 0) return new Set();
-
-      const itemIdSet = new Set(items.map((item) => item.id));
-      const next = new Set(Array.from(prev).filter((id) => itemIdSet.has(id)));
-
-      if (prev.size === 0) {
-        return new Set(items.map((item) => item.id));
-      }
-
-      return next;
-    });
-  }, [items]);
+    return new Set(
+      Array.from(selectedItemIds).filter((id) => itemIdSet.has(id)),
+    );
+  }, [itemIdSet, items, selectedItemIds]);
 
   const keyword = useMemo(
     () => normalizeText(searchParams.get("q") ?? ""),
@@ -147,13 +135,15 @@ export default function CartPage() {
   }, [items, keyword]);
 
   const selectedItems = useMemo(
-    () => items.filter((item) => selectedItemIds.has(item.id)),
-    [items, selectedItemIds],
+    () => items.filter((item) => effectiveSelectedItemIds.has(item.id)),
+    [effectiveSelectedItemIds, items],
   );
 
   const filteredSelectedCount = useMemo(
-    () => filteredItems.filter((item) => selectedItemIds.has(item.id)).length,
-    [filteredItems, selectedItemIds],
+    () =>
+      filteredItems.filter((item) => effectiveSelectedItemIds.has(item.id))
+        .length,
+    [effectiveSelectedItemIds, filteredItems],
   );
 
   const subtotal = useMemo(
@@ -193,54 +183,57 @@ export default function CartPage() {
     [freeShipVouchers],
   );
 
+  const effectiveSelectedDiscountId =
+    selectedDiscountId &&
+    availableDiscountVouchers.some(
+      (voucher) => voucher.id === selectedDiscountId,
+    )
+      ? selectedDiscountId
+      : null;
+
+  const effectiveSelectedFreeShipId =
+    selectedFreeShipId &&
+    availableFreeShipVouchers.some(
+      (voucher) => voucher.id === selectedFreeShipId,
+    )
+      ? selectedFreeShipId
+      : null;
+
   const selectedDiscountVoucher = useMemo(
     () =>
-      availableDiscountVouchers.find(
-        (voucher) => voucher.id === selectedDiscountId,
-      ),
-    [availableDiscountVouchers, selectedDiscountId],
+      effectiveSelectedDiscountId
+        ? availableDiscountVouchers.find(
+            (voucher) => voucher.id === effectiveSelectedDiscountId,
+          )
+        : undefined,
+    [availableDiscountVouchers, effectiveSelectedDiscountId],
   );
 
   const selectedFreeShipVoucher = useMemo(
     () =>
-      availableFreeShipVouchers.find(
-        (voucher) => voucher.id === selectedFreeShipId,
-      ),
-    [availableFreeShipVouchers, selectedFreeShipId],
+      effectiveSelectedFreeShipId
+        ? availableFreeShipVouchers.find(
+            (voucher) => voucher.id === effectiveSelectedFreeShipId,
+          )
+        : undefined,
+    [availableFreeShipVouchers, effectiveSelectedFreeShipId],
   );
-
-  useEffect(() => {
-    if (
-      selectedDiscountId &&
-      !availableDiscountVouchers.some(
-        (voucher) => voucher.id === selectedDiscountId,
-      )
-    ) {
-      setSelectedDiscountId(null);
-    }
-  }, [availableDiscountVouchers, selectedDiscountId]);
-
-  useEffect(() => {
-    if (
-      selectedFreeShipId &&
-      !availableFreeShipVouchers.some(
-        (voucher) => voucher.id === selectedFreeShipId,
-      )
-    ) {
-      setSelectedFreeShipId(null);
-    }
-  }, [availableFreeShipVouchers, selectedFreeShipId]);
 
   const eligibleDiscountSubtotal = useMemo(() => {
     if (!selectedDiscountVoucher) return 0;
-    return getEligibleSubtotalForVoucher(selectedDiscountVoucher, selectedItems, subtotal);
+    return getEligibleSubtotalForVoucher(
+      selectedDiscountVoucher,
+      selectedItems,
+      subtotal,
+    );
   }, [selectedDiscountVoucher, selectedItems, subtotal]);
 
   const discountAmount = selectedDiscountVoucher
     ? Math.min(
         eligibleDiscountSubtotal,
         Math.round(
-          (eligibleDiscountSubtotal * selectedDiscountVoucher.discount_percent) /
+          (eligibleDiscountSubtotal *
+            selectedDiscountVoucher.discount_percent) /
             100,
         ),
       )
@@ -257,7 +250,9 @@ export default function CartPage() {
 
   const handleToggleItem = (id: string, checked: boolean) => {
     setSelectedItemIds((prev) => {
-      const next = new Set(prev);
+      const next = new Set(
+        prev.size === 0 ? Array.from(itemIdSet) : Array.from(prev),
+      );
       if (checked) {
         next.add(id);
       } else {
@@ -269,7 +264,9 @@ export default function CartPage() {
 
   const handleToggleAllFiltered = (checked: boolean) => {
     setSelectedItemIds((prev) => {
-      const next = new Set(prev);
+      const next = new Set(
+        prev.size === 0 ? Array.from(itemIdSet) : Array.from(prev),
+      );
 
       filteredItems.forEach((item) => {
         if (checked) {
@@ -286,11 +283,13 @@ export default function CartPage() {
   const handleProceedCheckout = () => {
     if (selectedItems.length === 0) return;
 
-    saveCheckoutSession({
-      items: selectedItems,
-      selectedDiscountId,
-      selectedFreeShipId,
-    });
+    dispatch(
+      setCheckoutSession({
+        items: selectedItems,
+        selectedDiscountId: effectiveSelectedDiscountId,
+        selectedFreeShipId: effectiveSelectedFreeShipId,
+      }),
+    );
 
     navigate("/checkout");
   };
@@ -349,7 +348,7 @@ export default function CartPage() {
                   <article
                     key={item.id}
                     className={`grid gap-4 rounded-lg border-b px-3 pb-5 pt-3 sm:grid-cols-[96px_1fr] ${
-                      selectedItemIds.has(item.id)
+                      effectiveSelectedItemIds.has(item.id)
                         ? "border-teal-200 bg-teal-50/40"
                         : "border-gray-100"
                     }`}
@@ -358,7 +357,7 @@ export default function CartPage() {
                       <label className="relative inline-flex h-4 w-4 cursor-pointer items-center justify-center">
                         <input
                           type="checkbox"
-                          checked={selectedItemIds.has(item.id)}
+                          checked={effectiveSelectedItemIds.has(item.id)}
                           onChange={(event) =>
                             handleToggleItem(item.id, event.target.checked)
                           }
@@ -399,7 +398,12 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              updateCartQuantity(item.id, item.quantity - 1)
+                              dispatch(
+                                updateCartItemQuantity({
+                                  id: item.id,
+                                  quantity: item.quantity - 1,
+                                }),
+                              )
                             }
                             className="h-9 w-9 text-gray-700 hover:bg-gray-50"
                           >
@@ -411,7 +415,12 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              updateCartQuantity(item.id, item.quantity + 1)
+                              dispatch(
+                                updateCartItemQuantity({
+                                  id: item.id,
+                                  quantity: item.quantity + 1,
+                                }),
+                              )
                             }
                             className="h-9 w-9 text-gray-700 hover:bg-gray-50"
                           >
@@ -421,7 +430,7 @@ export default function CartPage() {
 
                         <button
                           type="button"
-                          onClick={() => removeFromCart(item.id)}
+                          onClick={() => dispatch(removeCartItem(item.id))}
                           className="mr-1 inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:border-rose-300 hover:bg-rose-100 hover:text-rose-800"
                         >
                           <DeleteOutlined />
@@ -460,7 +469,7 @@ export default function CartPage() {
                       <input
                         type="radio"
                         name="discount-voucher"
-                        checked={selectedDiscountId === voucher.id}
+                        checked={effectiveSelectedDiscountId === voucher.id}
                         onChange={() => setSelectedDiscountId(voucher.id)}
                         className="mt-0.5 h-4 w-4 cursor-pointer accent-rose-600 ring-rose-200 focus:ring-2"
                       />
@@ -498,12 +507,13 @@ export default function CartPage() {
                       <input
                         type="radio"
                         name="freeship-voucher"
-                        checked={selectedFreeShipId === voucher.id}
+                        checked={effectiveSelectedFreeShipId === voucher.id}
                         onChange={() => setSelectedFreeShipId(voucher.id)}
                         className="mt-0.5 h-4 w-4 cursor-pointer accent-emerald-600 ring-emerald-200 focus:ring-2"
                       />
                       <span>
-                        <strong>{voucher.code}</strong> - Giảm 100% phí vận chuyển
+                        <strong>{voucher.code}</strong> - Giảm 100% phí vận
+                        chuyển
                       </span>
                     </label>
                   ))}
