@@ -1,0 +1,91 @@
+import axiosClient from "./axiosClient";
+import {
+  normalizeLoginResponse,
+  normalizeUser,
+  type ApiUser,
+} from "../utils/apiMappers";
+import { unwrapResult } from "../utils/apiResponse";
+
+export type LoginResponse = {
+  accessToken: string;
+  user: ApiUser | null;
+};
+
+export type RegisterPayload = {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+};
+
+function normalizeAccount(value: string): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+export async function loginWithEmailOrUsername(
+  identifier: string,
+  password: string,
+): Promise<LoginResponse> {
+  const account = normalizeAccount(identifier);
+  const safePassword = String(password || "");
+
+  if (!account || !safePassword) {
+    throw new Error("Vui lòng nhập đầy đủ tài khoản và mật khẩu.");
+  }
+
+  if (import.meta.env.DEV) {
+    console.log("👀 loginWithEmailOrUsername called:", { identifier: account });
+  }
+
+  let response: unknown;
+  try {
+    response = await axiosClient.post("/auth/login", {
+      identifier: account,
+      username: account,
+      email: account,
+      password: safePassword,
+    });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.error("❌ loginWithEmailOrUsername failed:", error);
+    }
+    throw error;
+  }
+
+  if (import.meta.env.DEV) {
+    console.log("👀 DỮ LIỆU THẬT MÀ AXIOS NHẬN ĐƯỢC LÀ:", response);
+  }
+
+  const normalized = normalizeLoginResponse(response);
+
+  if (!normalized.accessToken) {
+    throw new Error("Đăng nhập thất bại. Backend không trả về token.");
+  }
+
+  return normalized;
+}
+
+export async function registerAccount(
+  payload: RegisterPayload,
+): Promise<ApiUser> {
+  const fullName = String(payload.fullName || "").trim();
+  const username = normalizeAccount(payload.username);
+  const email = normalizeAccount(payload.email);
+  const password = String(payload.password || "");
+
+  if (!fullName || !username || !email || !password) {
+    throw new Error("Vui lòng nhập đầy đủ thông tin đăng ký.");
+  }
+
+  const response = await axiosClient.post("/auth/register", {
+    full_name: fullName,
+    username,
+    email,
+    password,
+  });
+
+  return normalizeUser(unwrapResult(response));
+}
+
