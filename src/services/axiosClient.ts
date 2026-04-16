@@ -1,6 +1,5 @@
 import axios from "axios";
-import { isJwtExpired } from "../utils/jwt";
-import { parseJwtPayload } from "../utils/jwt";
+import { isJwtExpired, parseJwtPayload } from "../utils/jwt";
 import { getStoreRef } from "../app/storeRef";
 import { clearSession, hydrateSession } from "../features/session/sessionSlice";
 import {
@@ -22,6 +21,25 @@ const baseURL =
     import.meta.env &&
     import.meta.env.VITE_API_BASE_URL) ||
   DEFAULT_BASE_URL;
+
+function normalizePrimaryRole(value: unknown): string {
+  const safe = String(value || "").trim().toUpperCase();
+  if (!safe) return "";
+  return safe.startsWith("ROLE_") ? safe.slice(5) : safe;
+}
+
+function normalizeRoles(raw: unknown, primaryRole = ""): string[] {
+  const roles = Array.isArray(raw)
+    ? raw.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)
+    : [];
+
+  const normalizedPrimaryRole = normalizePrimaryRole(primaryRole);
+  if (normalizedPrimaryRole && !roles.includes(`ROLE_${normalizedPrimaryRole}`)) {
+    roles.push(`ROLE_${normalizedPrimaryRole}`);
+  }
+
+  return roles;
+}
 
 export function getAccessToken(): string | null {
   const store = getStoreRef();
@@ -52,7 +70,7 @@ export function setAccessToken(token: string | null): void {
       localStorage.setItem(AUTH_TOKEN_KEY, token);
     }
   } catch {
-    // ignore storage errors (private mode, blocked storage, etc.)
+    // ignore storage errors
   }
 
   if (!token || isJwtExpired(token)) {
@@ -64,11 +82,14 @@ export function setAccessToken(token: string | null): void {
   }
 
   const payload = parseJwtPayload(token);
-  const userId = String(payload?.sub ?? "");
+  const userId = String(payload?.user_id ?? payload?.sub ?? "");
   const fullName =
     typeof payload?.full_name === "string" ? payload.full_name : "";
   const username =
     typeof payload?.username === "string" ? payload.username : "";
+  const email = typeof payload?.email === "string" ? payload.email : "";
+  const primaryRole = normalizePrimaryRole(payload?.primary_role);
+  const roles = normalizeRoles(payload?.roles, primaryRole);
   const displayName = fullName || username;
 
   const profileFormRaw = localStorage.getItem(
@@ -92,12 +113,20 @@ export function setAccessToken(token: string | null): void {
       token,
       userId,
       displayName,
+      user: {
+        id: userId,
+        username,
+        email,
+        full_name: fullName,
+      },
       profileForm: profileFormRaw ? JSON.parse(profileFormRaw) : undefined,
       savedAddresses: savedAddressesRaw
         ? JSON.parse(savedAddressesRaw)
         : undefined,
       avatarSrc,
       selectedAddressId: undefined,
+      roles,
+      primaryRole,
     }),
   );
 

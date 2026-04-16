@@ -9,6 +9,8 @@ import CartPage from "../pages/CartPage";
 import CheckoutPage from "../pages/CheckoutPage";
 import CheckoutOrderPage from "../pages/CheckoutOrderPage";
 import AccountPage from "../pages/AccountPage.tsx";
+import StaffDashboardPage from "../pages/StaffDashboardPage";
+import RequireStaff from "../components/guards/RequireStaff";
 
 function ScrollToTop() {
   const { pathname, search } = useLocation();
@@ -34,6 +36,9 @@ export default function AppRoutes() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/checkout/:id" element={<CheckoutOrderPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route element={<RequireStaff />}>
+          <Route path="/staff" element={<StaffDashboardPage />} />
+        </Route>
       </Routes>
     </>
   );

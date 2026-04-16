@@ -27,6 +27,7 @@ export type ApiBook = {
   cover_image: string;
   sold_count: number;
   rental_count: number;
+  total_stock?: number;
   description?: string;
   long_description?: string;
   gallery_images?: string[];
@@ -73,6 +74,7 @@ export function normalizeBook(raw: unknown): ApiBook {
     cover_image: asString(book.cover_image ?? book.coverImage),
     sold_count: asNumber(book.sold_count ?? book.soldCount),
     rental_count: asNumber(book.rental_count ?? book.rentalCount),
+    total_stock: asNumber(book.total_stock ?? book.totalStock),
     description:
       typeof book.description === "string" ? book.description : undefined,
     long_description:

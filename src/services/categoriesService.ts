@@ -1,4 +1,5 @@
 import axiosClient from "./axiosClient";
+import { unwrapPagedContent, unwrapResult } from "../utils/apiResponse";
 
 export type ApiCategory = {
   id: string;
@@ -6,30 +7,29 @@ export type ApiCategory = {
 };
 
 function normalizeCategory(raw: unknown): ApiCategory {
-  const value = (raw ?? {}) as Record<string, unknown>;
-  const id = value.id;
-  const name = value.name ?? value.category_name ?? value.categoryName;
+  const safe = (raw ?? {}) as Record<string, unknown>;
+  const id = safe.id;
+  const name = safe.name;
 
   return {
-    id: typeof id === "string" || typeof id === "number" ? String(id) : "",
+    id: typeof id === "number" || typeof id === "string" ? String(id) : "",
     name: typeof name === "string" ? name : "",
   };
 }
 
 export async function getCategories(): Promise<ApiCategory[]> {
-  const response = (await axiosClient.get("/categories")) as unknown;
-  if (!Array.isArray(response)) return [];
-  return response.map((entry) => normalizeCategory(entry));
+  const response = await axiosClient.get("/categories", {
+    params: { _page: 0, _limit: 100 },
+  });
+  return unwrapPagedContent<unknown>(response).map((entry) => normalizeCategory(entry));
 }
 
 export async function getCategoryById(
   categoryId: string,
 ): Promise<ApiCategory | null> {
   if (!categoryId.trim()) return null;
-  const response = (await axiosClient.get(
+  const response = await axiosClient.get(
     `/categories/${encodeURIComponent(categoryId)}`,
-  )) as unknown;
-
-  if (!response) return null;
-  return normalizeCategory(response);
+  );
+  return normalizeCategory(unwrapResult(response));
 }

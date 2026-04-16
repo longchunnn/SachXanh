@@ -4,12 +4,14 @@ import { ToastContainer } from "react-toastify";
 import AppRoutes from "./routes/AppRoutes";
 import { store } from "./app/store";
 import "react-toastify/dist/ReactToastify.css";
+import SupportWidget from "./components/support/SupportWidget";
 
 export default function App() {
   return (
     <Provider store={store}>
       <BrowserRouter>
         <AppRoutes />
+        <SupportWidget />
         <ToastContainer
           position="top-right"
           autoClose={1500}
