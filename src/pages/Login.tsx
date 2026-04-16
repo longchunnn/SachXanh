@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { normalizeRole } from "../utils/roles";
+import { parseJwtPayload } from "../utils/jwt";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRightOutlined, BookOutlined } from "@ant-design/icons";
 import { loginWithEmailOrUsername } from "../services/authService";
@@ -39,8 +41,10 @@ export default function LoginPage() {
       );
 
       setAccessToken(response.accessToken);
+      const payload = parseJwtPayload(response.accessToken);
+      const primaryRole = normalizeRole(payload?.primary_role);
       toast.success("Đăng nhập thành công");
-      navigate("/");
+      navigate(primaryRole === "ADMIN" || primaryRole === "STAFF" || primaryRole === "MANAGER" ? "/staff" : "/");
     } catch (error) {
       const message =
         error instanceof Error

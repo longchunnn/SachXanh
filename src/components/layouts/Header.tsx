@@ -8,6 +8,7 @@ import {
 } from "@ant-design/icons";
 import { useAppSelector } from "../../app/hooks";
 import logoImage from "../../asset/logo.jpg";
+import { isStaffRole } from "../../utils/roles";
 
 type HeaderProps = {
   hideSearch?: boolean;
@@ -126,7 +127,9 @@ export default function Header({ hideSearch = false }: HeaderProps) {
     state.cart.items.reduce((sum, item) => sum + item.quantity, 0),
   );
   const isCartPage = location.pathname.startsWith("/cart");
+  const primaryRole = useAppSelector((state) => state.session.primaryRole);
   const displayCartCount = isAuthenticated ? cartCount : 0;
+  const showStaffButton = isAuthenticated && isStaffRole(primaryRole);
 
   return (
     <div className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-50 flex justify-center h-20">
@@ -164,6 +167,15 @@ export default function Header({ hideSearch = false }: HeaderProps) {
               className="inline-flex items-center rounded-full border border-teal-700 px-4 py-2 text-sm font-semibold text-teal-700! transition-colors hover:bg-teal-700 hover:text-white!"
             >
               Đăng nhập
+            </Link>
+          ) : null}
+
+          {showStaffButton ? (
+            <Link
+              to="/staff"
+              className="hidden rounded-full border border-teal-200 px-4 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 md:inline-flex"
+            >
+              Staff
             </Link>
           ) : null}
 

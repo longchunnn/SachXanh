@@ -383,7 +383,7 @@ export default function CheckoutPage() {
 
     const token = getAccessToken();
     const payload = token ? parseJwtPayload(token) : null;
-    const userId = String(payload?.sub ?? "").trim();
+    const userId = String(payload?.user_id ?? payload?.sub ?? "").trim();
 
     if (!userId) {
       setAddressError("Vui lòng đăng nhập lại để tạo đơn hàng.");

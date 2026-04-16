@@ -45,6 +45,8 @@ export type SessionState = {
   avatarSrc: string;
   savedAddresses: SavedAddress[];
   selectedAddressId: string | null;
+  roles: string[];
+  primaryRole: string;
 };
 
 export type HydrateSessionPayload = {
@@ -56,6 +58,8 @@ export type HydrateSessionPayload = {
   avatarSrc?: string;
   savedAddresses?: SavedAddress[];
   selectedAddressId?: string | null;
+  roles?: string[];
+  primaryRole?: string;
 };
 
 const TOKEN_KEY = "access_token";
@@ -66,6 +70,25 @@ function canUseStorage(): boolean {
 
 function getStorageKey(prefix: string, userId: string): string {
   return `${prefix}:${userId}`;
+}
+
+function normalizePrimaryRole(value: unknown): string {
+  const safe = String(value || "").trim().toUpperCase();
+  if (!safe) return "";
+  return safe.startsWith("ROLE_") ? safe.slice(5) : safe;
+}
+
+function normalizeRoles(raw: unknown, primaryRole = ""): string[] {
+  const roles = Array.isArray(raw)
+    ? raw.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)
+    : [];
+
+  const normalizedPrimaryRole = normalizePrimaryRole(primaryRole);
+  if (normalizedPrimaryRole && !roles.includes(`ROLE_${normalizedPrimaryRole}`)) {
+    roles.push(`ROLE_${normalizedPrimaryRole}`);
+  }
+
+  return roles;
 }
 
 function getDefaultProfileForm(user: UserRecord | null): ProfileForm {
@@ -105,6 +128,8 @@ function loadInitialSession(): SessionState {
       avatarSrc: "",
       savedAddresses: [],
       selectedAddressId: null,
+      roles: [],
+      primaryRole: "",
     };
   }
 
@@ -119,19 +144,22 @@ function loadInitialSession(): SessionState {
       avatarSrc: "",
       savedAddresses: [],
       selectedAddressId: null,
+      roles: [],
+      primaryRole: "",
     };
   }
 
   const payload = parseJwtPayload(token);
-  const userId = String(payload?.sub ?? "");
-  const fullName =
-    typeof payload?.full_name === "string" ? payload.full_name : "";
-  const username =
-    typeof payload?.username === "string" ? payload.username : "";
+  const userId = String(payload?.user_id ?? payload?.sub ?? "");
+  const fullName = typeof payload?.full_name === "string" ? payload.full_name : "";
+  const username = typeof payload?.username === "string" ? payload.username : "";
+  const email = typeof payload?.email === "string" ? payload.email : "";
   const displayName = fullName || username;
+  const primaryRole = normalizePrimaryRole(payload?.primary_role);
+  const roles = normalizeRoles(payload?.roles, primaryRole);
   const profileForm = readJson<ProfileForm>(
     getStorageKey("bookstore_profile_form", userId),
-    getDefaultProfileForm(null),
+    getDefaultProfileForm({ id: userId, username, email, full_name: fullName }),
   );
   const savedAddresses = readJson<SavedAddress[]>(
     getStorageKey("bookstore_saved_addresses", userId),
@@ -140,18 +168,24 @@ function loadInitialSession(): SessionState {
   const selectedAddressId =
     savedAddresses.find((address) => address.isDefault)?.id ?? null;
   const avatarSrc =
-    localStorage.getItem(getStorageKey("bookstore_profile_avatar", userId)) ??
-    "";
+    localStorage.getItem(getStorageKey("bookstore_profile_avatar", userId)) ?? "";
 
   return {
     token,
     userId,
     displayName,
-    user: null,
+    user: {
+      id: userId,
+      username,
+      email,
+      full_name: fullName,
+    },
     profileForm,
     avatarSrc,
     savedAddresses,
     selectedAddressId,
+    roles,
+    primaryRole,
   };
 }
 
@@ -175,6 +209,8 @@ const sessionSlice = createSlice({
         action.payload.selectedAddressId ??
         state.savedAddresses.find((address) => address.isDefault)?.id ??
         null;
+      state.roles = action.payload.roles ?? [];
+      state.primaryRole = normalizePrimaryRole(action.payload.primaryRole);
     },
     clearSession(state) {
       state.token = null;
@@ -185,6 +221,8 @@ const sessionSlice = createSlice({
       state.avatarSrc = "";
       state.savedAddresses = [];
       state.selectedAddressId = null;
+      state.roles = [];
+      state.primaryRole = "";
     },
     setUser(state, action: PayloadAction<UserRecord | null>) {
       state.user = action.payload;

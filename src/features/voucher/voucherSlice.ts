@@ -42,7 +42,7 @@ function loadInitialVouchers(): VoucherWalletItem[] {
   }
 
   const payload = parseJwtPayload(token);
-  const userId = String(payload?.sub ?? "").trim();
+  const userId = String(payload?.user_id ?? payload?.sub ?? "").trim();
   if (!userId) {
     return [];
   }

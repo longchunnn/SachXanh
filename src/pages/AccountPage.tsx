@@ -395,7 +395,7 @@ export default function AccountPage() {
       setLoading(true);
       const token = getAccessToken();
       const payload = token ? parseJwtPayload(token) : null;
-      const userId = sessionUserId || String(payload?.sub ?? "");
+      const userId = sessionUserId || String(payload?.user_id ?? payload?.sub ?? "");
       const tokenFullName =
         typeof payload?.full_name === "string" ? payload.full_name : "";
       const tokenUsername =
