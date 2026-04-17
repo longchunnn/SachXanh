@@ -20,13 +20,13 @@ export type RegisterPayload = {
 
 function normalizeAccount(value: string): string {
   return String(value || "")
-      .trim()
-      .toLowerCase();
+    .trim()
+    .toLowerCase();
 }
 
 export async function loginWithEmailOrUsername(
-    identifier: string,
-    password: string,
+  identifier: string,
+  password: string,
 ): Promise<LoginResponse> {
   const account = normalizeAccount(identifier);
   const safePassword = String(password || "");
@@ -42,9 +42,7 @@ export async function loginWithEmailOrUsername(
   let response: unknown;
   try {
     response = await axiosClient.post("/auth/login", {
-      identifier: account,
       username: account,
-      email: account,
       password: safePassword,
     });
   } catch (error) {
@@ -68,7 +66,7 @@ export async function loginWithEmailOrUsername(
 }
 
 export async function registerAccount(
-    payload: RegisterPayload,
+  payload: RegisterPayload,
 ): Promise<ApiUser> {
   const fullName = String(payload.fullName || "").trim();
   const username = normalizeAccount(payload.username);

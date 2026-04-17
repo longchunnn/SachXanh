@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
@@ -271,6 +271,7 @@ export default function AccountPage() {
   );
   const [selectedVoucher, setSelectedVoucher] =
     useState<VoucherWalletItem | null>(null);
+  const lastLoadedSessionUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     register("fullName", {
@@ -389,6 +390,9 @@ export default function AccountPage() {
   }, [form.shippingDistrict]);
 
   useEffect(() => {
+    if (lastLoadedSessionUserIdRef.current === sessionUserId) return;
+    lastLoadedSessionUserIdRef.current = sessionUserId ?? null;
+
     let isMounted = true;
 
     async function loadData() {
@@ -503,7 +507,7 @@ export default function AccountPage() {
     return () => {
       isMounted = false;
     };
-  }, [dispatch, sessionUserId]);
+  }, [dispatch, savedAddresses, sessionUserId, storedProfileForm]);
 
   useEffect(() => {
     if (!currentUserId) return;

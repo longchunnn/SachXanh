@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { MessageOutlined, SendOutlined, CloseOutlined } from "@ant-design/icons";
+import {
+  MessageOutlined,
+  SendOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 import { toast } from "react-toastify";
 import { useAppSelector } from "../../app/hooks";
 import { isStaffRole } from "../../utils/roles";
@@ -14,13 +18,16 @@ import {
 } from "../../firebase/chatService";
 import { openSupportConversation } from "../../services/supportService";
 
-function formatTime(value: ChatConversation["updatedAt"] | ChatMessage["createdAt"] | undefined) {
+function formatTime(
+  value: ChatConversation["updatedAt"] | ChatMessage["createdAt"] | undefined,
+) {
   if (!value) return "";
-  const date = value instanceof Date
-    ? value
-    : typeof value === "object" && value && typeof value.seconds === "number"
-      ? new Date(value.seconds * 1000)
-      : null;
+  const date =
+    value instanceof Date
+      ? value
+      : typeof value === "object" && value && typeof value.seconds === "number"
+        ? new Date(value.seconds * 1000)
+        : null;
 
   if (!date || Number.isNaN(date.getTime())) return "";
 
@@ -47,7 +54,10 @@ export default function SupportWidget() {
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
 
   const shouldHide = useMemo(
-    () => ["/login", "/register", "/staff"].some((path) => location.pathname.startsWith(path)),
+    () =>
+      ["/login", "/register", "/staff"].some((path) =>
+        location.pathname.startsWith(path),
+      ),
     [location.pathname],
   );
 
@@ -68,7 +78,9 @@ export default function SupportWidget() {
         if (!cancelled) {
           setIsFirebaseReady(false);
           toast.error(
-            error instanceof Error ? error.message : "Không kết nối được Firebase chat.",
+            error instanceof Error
+              ? error.message
+              : "Không kết nối được Firebase chat.",
           );
         }
       });
@@ -89,7 +101,11 @@ export default function SupportWidget() {
         unsubscribe = fn;
       })
       .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Không tải được lịch sử hỗ trợ.");
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Không tải được lịch sử hỗ trợ.",
+        );
       });
 
     return () => {
@@ -109,7 +125,9 @@ export default function SupportWidget() {
         unsubscribe = fn;
       })
       .catch((error) => {
-        toast.error(error instanceof Error ? error.message : "Không tải được tin nhắn.");
+        toast.error(
+          error instanceof Error ? error.message : "Không tải được tin nhắn.",
+        );
       });
 
     return () => {
@@ -136,7 +154,11 @@ export default function SupportWidget() {
       setRequestMessage("");
       toast.success(response.message || "Đã gửi yêu cầu hỗ trợ.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không mở được yêu cầu hỗ trợ.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Không mở được yêu cầu hỗ trợ.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -148,10 +170,17 @@ export default function SupportWidget() {
 
     try {
       setIsSubmitting(true);
-      await sendConversationMessage(selectedConversationId, safeMessage, "USER", displayName || "Khách hàng");
+      await sendConversationMessage(
+        selectedConversationId,
+        safeMessage,
+        "USER",
+        displayName || "Khách hàng",
+      );
       setReplyMessage("");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Không gửi được tin nhắn.");
+      toast.error(
+        error instanceof Error ? error.message : "Không gửi được tin nhắn.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -162,13 +191,15 @@ export default function SupportWidget() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-3">
+    <div className="fixed bottom-5 right-5 z-60 flex flex-col items-end gap-3">
       {isOpen ? (
-        <div className="h-[38rem] w-[24rem] overflow-hidden rounded-2xl border border-teal-100 bg-white shadow-2xl">
+        <div className="h-152 w-[24rem] overflow-hidden rounded-2xl border border-teal-100 bg-white shadow-2xl">
           <div className="flex items-center justify-between bg-teal-800 px-4 py-3 text-white">
             <div>
               <p className="text-sm font-semibold">Hỗ trợ khách hàng</p>
-              <p className="text-xs text-teal-100">Chat realtime với nhân viên</p>
+              <p className="text-xs text-teal-100">
+                Chat realtime với nhân viên
+              </p>
             </div>
             <button
               type="button"
@@ -179,7 +210,7 @@ export default function SupportWidget() {
             </button>
           </div>
 
-          <div className="grid h-[calc(38rem-56px)] grid-rows-[auto,1fr,auto]">
+          <div className="grid h-138 grid-rows-[auto,1fr,auto]">
             <div className="border-b border-gray-100 p-3">
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Bắt đầu yêu cầu hỗ trợ
@@ -208,21 +239,29 @@ export default function SupportWidget() {
                 </p>
                 <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                   {conversations.length === 0 ? (
-                    <span className="text-xs text-gray-400">Chưa có cuộc trò chuyện nào.</span>
+                    <span className="text-xs text-gray-400">
+                      Chưa có cuộc trò chuyện nào.
+                    </span>
                   ) : (
                     conversations.map((conversation) => (
                       <button
                         key={conversation.id}
                         type="button"
-                        onClick={() => setSelectedConversationId(conversation.id)}
-                        className={`min-w-[11rem] rounded-xl border px-3 py-2 text-left text-xs transition ${
+                        onClick={() =>
+                          setSelectedConversationId(conversation.id)
+                        }
+                        className={`min-w-44 rounded-xl border px-3 py-2 text-left text-xs transition ${
                           selectedConversationId === conversation.id
                             ? "border-teal-700 bg-teal-50 text-teal-900"
                             : "border-gray-200 text-gray-600 hover:border-teal-200"
                         }`}
                       >
-                        <div className="font-semibold">#{conversation.id.slice(0, 8)}</div>
-                        <div className="mt-1 line-clamp-2">{conversation.lastMessage || "Chưa có nội dung"}</div>
+                        <div className="font-semibold">
+                          #{conversation.id.slice(0, 8)}
+                        </div>
+                        <div className="mt-1 line-clamp-2">
+                          {conversation.lastMessage || "Chưa có nội dung"}
+                        </div>
                         <div className="mt-1 text-[11px] uppercase tracking-wide text-gray-400">
                           {conversation.status}
                         </div>
@@ -242,7 +281,9 @@ export default function SupportWidget() {
                           ? "Tất cả nhân viên đang bận, yêu cầu của bạn đang chờ xử lý"
                           : "Đang kết nối với nhân viên"}
                     </div>
-                    <div className="mt-1">Trạng thái: {currentConversation.status}</div>
+                    <div className="mt-1">
+                      Trạng thái: {currentConversation.status}
+                    </div>
                   </div>
                 ) : null}
 
@@ -266,8 +307,12 @@ export default function SupportWidget() {
                               {message.senderName}
                             </div>
                           ) : null}
-                          <div className="whitespace-pre-wrap">{message.content}</div>
-                          <div className={`mt-1 text-[11px] ${mine ? "text-teal-100" : "text-gray-400"}`}>
+                          <div className="whitespace-pre-wrap">
+                            {message.content}
+                          </div>
+                          <div
+                            className={`mt-1 text-[11px] ${mine ? "text-teal-100" : "text-gray-400"}`}
+                          >
                             {formatTime(message.createdAt)}
                           </div>
                         </div>
@@ -289,9 +334,13 @@ export default function SupportWidget() {
                   value={replyMessage}
                   onChange={(event) => setReplyMessage(event.target.value)}
                   rows={2}
-                  placeholder={selectedConversationId ? "Nhập tin nhắn..." : "Hãy gửi yêu cầu hỗ trợ trước"}
+                  placeholder={
+                    selectedConversationId
+                      ? "Nhập tin nhắn..."
+                      : "Hãy gửi yêu cầu hỗ trợ trước"
+                  }
                   disabled={!selectedConversationId || isSubmitting}
-                  className="min-h-[52px] flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-teal-600 disabled:bg-gray-100"
+                  className="min-h-13 flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none transition focus:border-teal-600 disabled:bg-gray-100"
                 />
                 <button
                   type="button"

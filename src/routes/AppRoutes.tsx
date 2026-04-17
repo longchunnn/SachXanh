@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import HomePage from "../pages/HomePage";
 import Register from "../pages/Register";
 import Login from "../pages/Login";
@@ -11,6 +11,16 @@ import CheckoutOrderPage from "../pages/CheckoutOrderPage";
 import AccountPage from "../pages/AccountPage.tsx";
 import StaffDashboardPage from "../pages/StaffDashboardPage";
 import RequireStaff from "../components/guards/RequireStaff";
+import RequireAdmin from "../components/guards/RequireAdmin";
+import AdminLayout from "../components/layouts/AdminLayout/AdminLayout";
+import {
+  AdminBooksPage,
+  AdminFlashSaleCreatePage,
+  AdminFlashSalePage,
+  AdminFlashSaleSelectBooksPage,
+  AdminStatsPage,
+  AdminVouchersPage,
+} from "../pages/admin";
 
 function ScrollToTop() {
   const { pathname, search } = useLocation();
@@ -36,8 +46,27 @@ export default function AppRoutes() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/checkout/:id" element={<CheckoutOrderPage />} />
         <Route path="/account" element={<AccountPage />} />
+
         <Route element={<RequireStaff />}>
           <Route path="/staff" element={<StaffDashboardPage />} />
+        </Route>
+
+        <Route element={<RequireAdmin />}>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<Navigate to="stats" replace />} />
+            <Route path="stats" element={<AdminStatsPage />} />
+            <Route path="books" element={<AdminBooksPage />} />
+            <Route path="vouchers" element={<AdminVouchersPage />} />
+            <Route path="flash-sale" element={<AdminFlashSalePage />} />
+            <Route
+              path="flash-sale/new"
+              element={<AdminFlashSaleCreatePage />}
+            />
+            <Route
+              path="flash-sale/new/select"
+              element={<AdminFlashSaleSelectBooksPage />}
+            />
+          </Route>
         </Route>
       </Routes>
     </>

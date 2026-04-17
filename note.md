@@ -63,3 +63,34 @@ bookstore-project/
 ├── tailwind.config.js      # Cấu hình Tailwind (để đè Antd)
 ├── vite.config.js          # Cấu hình build dự án
 └── package.json            # Danh sách thư viện
+
+
+bản bổ sung :
+src/
+ ├── app/
+ ├── asset/
+ ├── components/
+ │    ├── common/       (Các nút bấm, input dùng chung cho cả 2 bên)
+ │    └── layouts/
+ │         ├── ClientLayout/   (Chứa Header, Footer của web bán sách cũ)
+ │         └── AdminLayout/ 🆕 (Chứa Sidebar trái, Topbar riêng cho Admin)
+ ├── features/
+ │    ├── books/        (Dùng chung)
+ │    ├── cart/         (Chỉ client dùng)
+ │    ├── session/      (Dùng chung để quản lý đăng nhập)
+ │    └── flashSaleAdmin/ 🆕 (Tách riêng logic quản lý Flash Sale Admin ra đây)
+ ├── pages/
+ │    ├── client/       (👉 BẠN GOM TẤT CẢ CÁC TRANG USER CŨ VÀO ĐÂY)
+ │    │    ├── Home.tsx
+ │    │    └── Cart.tsx
+ │    └── admin/ 🆕     (👉 CÁC TRANG DÀNH CHO ADMIN)
+ │         ├── Dashboard.tsx
+ │         └── ManageFlashSale.tsx
+ ├── routes/
+ │    ├── ClientRoutes.tsx (Đường dẫn cho user: /, /cart, /books)
+ │    ├── AdminRoutes.tsx 🆕 (Đường dẫn cho admin: /admin, /admin/flash-sale)
+ │    └── ProtectedRoute.tsx 🆕 (Bảo vệ: Móc Token ra check xem có ROLE_ADMIN không)
+ ├── services/
+ │    ├── clientApi.ts
+ │    └── adminApi.ts 🆕
+ └── utils/
