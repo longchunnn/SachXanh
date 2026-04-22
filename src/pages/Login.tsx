@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { normalizeRole } from "../utils/roles";
 import { parseJwtPayload } from "../utils/jwt";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRightOutlined, BookOutlined } from "@ant-design/icons";
 import { loginWithEmailOrUsername } from "../services/authService";
-import { setAccessToken } from "../services/axiosClient";
+import { getAccessToken, setAccessToken } from "../services/axiosClient";
 import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
+import { useAppSelector } from "../app/hooks";
 
 type LoginFormValues = {
   account: string;
@@ -16,6 +17,9 @@ type LoginFormValues = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const token = useAppSelector((state) => state.session.token);
+  const primaryRoleInSession = useAppSelector((state) => state.session.primaryRole);
   const {
     register,
     handleSubmit,
@@ -30,6 +34,21 @@ export default function LoginPage() {
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    const currentToken = token || getAccessToken();
+    if (!currentToken) return;
+
+    const currentRole = normalizeRole(primaryRoleInSession);
+    const fallbackPath =
+      currentRole === "ADMIN" || currentRole === "STAFF" || currentRole === "MANAGER"
+        ? "/staff"
+        : "/";
+
+    if (location.pathname === "/login") {
+      navigate(fallbackPath, { replace: true });
+    }
+  }, [location.pathname, navigate, primaryRoleInSession, token]);
+
   const onSubmit = async (values: LoginFormValues) => {
     setSubmitError("");
 
@@ -43,8 +62,17 @@ export default function LoginPage() {
       setAccessToken(response.accessToken);
       const payload = parseJwtPayload(response.accessToken);
       const primaryRole = normalizeRole(payload?.primary_role);
+      const fromPath = (
+        location.state as { from?: { pathname?: string } } | null
+      )?.from?.pathname;
+      const redirectAfterLogin =
+        primaryRole === "ADMIN" || primaryRole === "STAFF" || primaryRole === "MANAGER"
+          ? "/staff"
+          : fromPath && fromPath !== "/staff"
+            ? fromPath
+            : "/";
       toast.success("Đăng nhập thành công");
-      navigate(primaryRole === "ADMIN" || primaryRole === "STAFF" || primaryRole === "MANAGER" ? "/staff" : "/");
+      navigate(redirectAfterLogin, { replace: true });
     } catch (error) {
       const message =
         error instanceof Error
