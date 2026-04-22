@@ -5,6 +5,7 @@ import AppRoutes from "./routes/AppRoutes";
 import { store } from "./app/store";
 import "react-toastify/dist/ReactToastify.css";
 import SupportWidget from "./components/support/SupportWidget";
+import ChatbotWidget from "./components/chatbot/ChatbotWidget";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
         <SupportWidget />
+        <ChatbotWidget />
         <ToastContainer
           position="top-right"
           autoClose={1500}
