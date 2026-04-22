@@ -3,10 +3,19 @@ import { normalizeRole } from "../utils/roles";
 import { parseJwtPayload } from "../utils/jwt";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRightOutlined, BookOutlined } from "@ant-design/icons";
-import { loginWithEmailOrUsername } from "../services/authService";
+import type { FirebaseError } from "firebase/app";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import {
+  getCurrentUserProfile,
+  loginWithEmailOrUsername,
+  loginWithGoogleIdToken,
+} from "../services/authService";
 import { setAccessToken } from "../services/axiosClient";
 import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
+import { firebaseAuth, firebaseEnabled } from "../firebase/client";
+import { useAppDispatch } from "../app/hooks";
+import { setUser } from "../features/session/sessionSlice";
 
 type LoginFormValues = {
   account: string;
@@ -16,6 +25,7 @@ type LoginFormValues = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const {
     register,
     handleSubmit,
@@ -29,6 +39,7 @@ export default function LoginPage() {
   });
   const [submitError, setSubmitError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
   const onSubmit = async (values: LoginFormValues) => {
     setSubmitError("");
@@ -41,6 +52,12 @@ export default function LoginPage() {
       );
 
       setAccessToken(response.accessToken);
+      try {
+        const me = await getCurrentUserProfile();
+        dispatch(setUser(me));
+      } catch {
+        // Keep JWT-based session as fallback if profile endpoint fails.
+      }
       const payload = parseJwtPayload(response.accessToken);
       const primaryRole = normalizeRole(payload?.primary_role);
       toast.success("Đăng nhập thành công");
@@ -54,6 +71,71 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleGoogleLogin = async () => {
+    setSubmitError("");
+    try {
+      if (!firebaseEnabled || !firebaseAuth) {
+        throw new Error(
+          "Chưa cấu hình Firebase cho frontend. Vui lòng kiểm tra lại file .env.",
+        );
+      }
+
+      setIsGoogleSubmitting(true);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+
+      const credential = await signInWithPopup(firebaseAuth, provider);
+      const idToken = await credential.user.getIdToken(true);
+
+      const response = await loginWithGoogleIdToken(idToken);
+      setAccessToken(response.accessToken);
+      try {
+        const me = await getCurrentUserProfile();
+        dispatch(setUser(me));
+      } catch {
+        // Keep JWT-based session as fallback if profile endpoint fails.
+      }
+      const payload = parseJwtPayload(response.accessToken);
+      const primaryRole = normalizeRole(payload?.primary_role);
+      toast.success("Đăng nhập Google thành công");
+      navigate(
+        primaryRole === "ADMIN" ||
+          primaryRole === "STAFF" ||
+          primaryRole === "MANAGER"
+          ? "/staff"
+          : "/",
+      );
+    } catch (error) {
+      const firebaseErrorCode = (error as FirebaseError | undefined)?.code;
+      const message = mapGoogleLoginError(error, firebaseErrorCode);
+      setSubmitError(message);
+    } finally {
+      setIsGoogleSubmitting(false);
+    }
+  };
+
+  const mapGoogleLoginError = (
+    error: unknown,
+    firebaseErrorCode: string | undefined,
+  ) => {
+    if (firebaseErrorCode === "auth/popup-closed-by-user") {
+      return "Bạn đã đóng cửa sổ đăng nhập Google.";
+    }
+    if (firebaseErrorCode === "auth/cancelled-popup-request") {
+      return "Yêu cầu đăng nhập Google đã bị huỷ.";
+    }
+    if (firebaseErrorCode === "auth/unauthorized-domain") {
+      return "Domain hiện tại chưa được cấp quyền trong Firebase Authentication.";
+    }
+    if (firebaseErrorCode === "auth/account-exists-with-different-credential") {
+      return "Email này đã tồn tại với phương thức đăng nhập khác.";
+    }
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return "Đăng nhập Google thất bại, vui lòng thử lại.";
   };
 
   return (
@@ -191,6 +273,17 @@ export default function LoginPage() {
               className="w-full bg-[#7a4b27] hover:bg-[#633c1f] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-md transition-colors tracking-wide mt-2"
             >
               {isSubmitting ? "ĐANG ĐĂNG NHẬP..." : "ĐĂNG NHẬP"}
+            </button>
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={isGoogleSubmitting}
+              className="w-full border border-gray-300 hover:border-gray-400 bg-white disabled:opacity-60 disabled:cursor-not-allowed text-gray-700 font-semibold py-3.5 rounded-md transition-colors tracking-wide flex items-center justify-center gap-2"
+            >
+              <span className="inline-block h-4 w-4 rounded-full bg-red-500" />
+              {isGoogleSubmitting
+                ? "ĐANG ĐĂNG NHẬP GOOGLE..."
+                : "ĐĂNG NHẬP VỚI GOOGLE"}
             </button>
           </form>
           <div className="h-px bg-gray-100 w-full my-8"></div>

@@ -24,6 +24,7 @@ import {
   getWardsByDistrictCode,
   type AdministrativeOption,
 } from "../utils/vnAdministrative";
+import { signOutFirebaseUser } from "../firebase/client";
 
 type UserRecord = {
   id: string;
@@ -877,12 +878,17 @@ export default function AccountPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSecurityAction = (action: "password" | "logout") => {
+  const handleSecurityAction = async (action: "password" | "logout") => {
     if (action === "password") {
       toast.info("Tính năng đổi mật khẩu sẽ kết nối API ở bước tiếp theo.");
       return;
     }
 
+    try {
+      await signOutFirebaseUser();
+    } catch {
+      // Continue local logout even if Firebase sign-out fails.
+    }
     clearAccessToken();
     navigate("/", { replace: true });
   };
@@ -1341,14 +1347,14 @@ export default function AccountPage() {
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
-                    onClick={() => handleSecurityAction("password")}
+                    onClick={() => void handleSecurityAction("password")}
                     className="border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-teal-700 hover:text-teal-700"
                   >
                     Đổi mật khẩu
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSecurityAction("logout")}
+                    onClick={() => void handleSecurityAction("logout")}
                     className="border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
                   >
                     Đăng xuất
@@ -1387,7 +1393,7 @@ export default function AccountPage() {
 
             <button
               type="button"
-              onClick={() => handleSecurityAction("logout")}
+              onClick={() => void handleSecurityAction("logout")}
               className="mt-4 w-full border border-rose-200 bg-rose-50 px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-100"
             >
               Đăng xuất
