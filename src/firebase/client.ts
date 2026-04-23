@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, signOut } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 function getFirebaseConfig() {
@@ -28,3 +28,10 @@ const app = firebaseEnabled
 export const firebaseApp = app;
 export const firebaseAuth = app ? getAuth(app) : null;
 export const firebaseDb = app ? getFirestore(app) : null;
+
+export async function signOutFirebaseUser(): Promise<void> {
+  if (!firebaseAuth) {
+    return;
+  }
+  await signOut(firebaseAuth);
+}
