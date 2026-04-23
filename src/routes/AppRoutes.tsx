@@ -11,6 +11,7 @@ import CheckoutOrderPage from "../pages/CheckoutOrderPage";
 import AccountPage from "../pages/AccountPage.tsx";
 import StaffDashboardPage from "../pages/StaffDashboardPage";
 import RequireStaff from "../components/guards/RequireStaff";
+import RedirectStaffToDashboard from "../components/guards/RedirectStaffToDashboard";
 
 function ScrollToTop() {
   const { pathname, search } = useLocation();
@@ -27,15 +28,17 @@ export default function AppRoutes() {
     <>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/search" element={<SearchPage />} />
-        <Route path="/book/:id" element={<BookDetailPage />} />
-        <Route path="/cart" element={<CartPage />} />
-        <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/checkout/:id" element={<CheckoutOrderPage />} />
-        <Route path="/account" element={<AccountPage />} />
+        <Route element={<RedirectStaffToDashboard />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/book/:id" element={<BookDetailPage />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/checkout/:id" element={<CheckoutOrderPage />} />
+          <Route path="/account" element={<AccountPage />} />
+        </Route>
         <Route element={<RequireStaff />}>
           <Route path="/staff" element={<StaffDashboardPage />} />
         </Route>

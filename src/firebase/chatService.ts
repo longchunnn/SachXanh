@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  increment,
   onSnapshot,
   orderBy,
   query,
@@ -29,6 +30,11 @@ export type ChatConversation = {
   lastMessageAt?: { seconds?: number; nanoseconds?: number } | Date | null;
   unreadByUser?: number;
   unreadByStaff?: number;
+  tags?: string[];
+  priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT" | string;
+  pinnedByStaff?: boolean;
+  internalNote?: string;
+  waitingFor?: "STAFF" | "USER" | string;
 };
 
 export type ChatMessage = {
@@ -50,7 +56,12 @@ function requireFirebaseDb() {
   return { db: firebaseDb, auth: firebaseAuth };
 }
 
-function toMillis(value: ChatConversation["updatedAt"] | ChatConversation["lastMessageAt"] | ChatMessage["createdAt"]) {
+function toMillis(
+  value:
+    | ChatConversation["updatedAt"]
+    | ChatConversation["lastMessageAt"]
+    | ChatMessage["createdAt"],
+) {
   if (!value) return 0;
   if (value instanceof Date) return value.getTime();
   if (typeof value === "object" && typeof value.seconds === "number") {
@@ -70,8 +81,13 @@ export async function listenMyConversations(
   const q = query(collection(db, "conversations"), where("userUid", "==", uid));
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs
-      .map((entry) => ({ id: entry.id, ...(entry.data() as Omit<ChatConversation, "id">) }))
-      .sort((left, right) => toMillis(right.updatedAt) - toMillis(left.updatedAt));
+      .map((entry) => ({
+        id: entry.id,
+        ...(entry.data() as Omit<ChatConversation, "id">),
+      }))
+      .sort(
+        (left, right) => toMillis(right.updatedAt) - toMillis(left.updatedAt),
+      );
     callback(items);
   });
 }
@@ -84,11 +100,19 @@ export async function listenAssignedConversations(
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Bạn chưa đăng nhập Firebase Chat.");
 
-  const q = query(collection(db, "conversations"), where("staffUid", "==", uid));
+  const q = query(
+    collection(db, "conversations"),
+    where("staffUid", "==", uid),
+  );
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs
-      .map((entry) => ({ id: entry.id, ...(entry.data() as Omit<ChatConversation, "id">) }))
-      .sort((left, right) => toMillis(right.updatedAt) - toMillis(left.updatedAt));
+      .map((entry) => ({
+        id: entry.id,
+        ...(entry.data() as Omit<ChatConversation, "id">),
+      }))
+      .sort(
+        (left, right) => toMillis(right.updatedAt) - toMillis(left.updatedAt),
+      );
     callback(items);
   });
 }
@@ -139,8 +163,9 @@ export async function sendConversationMessage(
     lastMessage: safeContent,
     lastMessageAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    unreadByUser: senderRole === "STAFF" ? 1 : 0,
-    unreadByStaff: senderRole === "USER" ? 1 : 0,
+    unreadByUser: senderRole === "STAFF" ? increment(1) : 0,
+    unreadByStaff: senderRole === "USER" ? increment(1) : 0,
+    waitingFor: senderRole === "STAFF" ? "USER" : "STAFF",
   });
 }
 
@@ -167,5 +192,34 @@ export async function upsertStaffStatus(params: {
     payload.currentLoad = params.currentLoad;
   }
 
-  await setDoc(doc(db, "staff_status", params.staffUid), payload, { merge: true });
+  await setDoc(doc(db, "staff_status", params.staffUid), payload, {
+    merge: true,
+  });
+}
+
+export async function updateConversationMetadata(
+  conversationId: string,
+  payload: Partial<
+    Pick<
+      ChatConversation,
+      "tags" | "priority" | "pinnedByStaff" | "internalNote" | "waitingFor"
+    >
+  >,
+): Promise<void> {
+  await ensureFirebaseChatLogin();
+  const { db } = requireFirebaseDb();
+  await updateDoc(doc(db, "conversations", conversationId), {
+    ...payload,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function markConversationReadForStaff(
+  conversationId: string,
+): Promise<void> {
+  await ensureFirebaseChatLogin();
+  const { db } = requireFirebaseDb();
+  await updateDoc(doc(db, "conversations", conversationId), {
+    unreadByStaff: 0,
+  });
 }

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { normalizeRole } from "../utils/roles";
 import { parseJwtPayload } from "../utils/jwt";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRightOutlined, BookOutlined } from "@ant-design/icons";
 import type { FirebaseError } from "firebase/app";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
@@ -41,6 +41,21 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
 
+  useEffect(() => {
+    const currentToken = token || getAccessToken();
+    if (!currentToken) return;
+
+    const currentRole = normalizeRole(primaryRoleInSession);
+    const fallbackPath =
+      currentRole === "ADMIN" || currentRole === "STAFF" || currentRole === "MANAGER"
+        ? "/staff"
+        : "/";
+
+    if (location.pathname === "/login") {
+      navigate(fallbackPath, { replace: true });
+    }
+  }, [location.pathname, navigate, primaryRoleInSession, token]);
+
   const onSubmit = async (values: LoginFormValues) => {
     setSubmitError("");
 
@@ -60,8 +75,17 @@ export default function LoginPage() {
       }
       const payload = parseJwtPayload(response.accessToken);
       const primaryRole = normalizeRole(payload?.primary_role);
+      const fromPath = (
+        location.state as { from?: { pathname?: string } } | null
+      )?.from?.pathname;
+      const redirectAfterLogin =
+        primaryRole === "ADMIN" || primaryRole === "STAFF" || primaryRole === "MANAGER"
+          ? "/staff"
+          : fromPath && fromPath !== "/staff"
+            ? fromPath
+            : "/";
       toast.success("Đăng nhập thành công");
-      navigate(primaryRole === "ADMIN" || primaryRole === "STAFF" || primaryRole === "MANAGER" ? "/staff" : "/");
+      navigate(redirectAfterLogin, { replace: true });
     } catch (error) {
       const message =
         error instanceof Error

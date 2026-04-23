@@ -12,6 +12,12 @@ function asNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function asOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function asStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   return value.map((item) => asString(item)).filter(Boolean);
@@ -53,11 +59,26 @@ export type ApiOrderItem = {
 export type ApiOrder = {
   id: string;
   user_id: string;
-  order_date: string;
+  user_full_name?: string;
+  user_email?: string;
+  user_phone?: string;
+  promotion_id?: string;
+  promotion_code?: string;
+  points_used?: number;
+  promotion_discount_amount?: number;
+  point_discount_amount?: number;
+  subtotal_amount?: number;
+  total_discount_amount?: number;
   total_amount: number;
   shipping_address: string;
   payment_method: string;
+  payment_status?: string;
   order_status: string;
+  created_at?: string;
+  updated_at?: string;
+  order_date: string;
+  total_items?: number;
+  note?: string;
   items: ApiOrderItem[];
 };
 
@@ -130,11 +151,43 @@ export function normalizeOrder(raw: unknown): ApiOrder {
   return {
     id: asString(order.id),
     user_id: asString(order.user_id ?? order.userId),
-    order_date: asString(order.order_date ?? order.orderDate),
+    user_full_name:
+      asString(order.user_full_name ?? order.userFullName) || undefined,
+    user_email: asString(order.user_email ?? order.userEmail) || undefined,
+    user_phone: asString(order.user_phone ?? order.userPhone) || undefined,
+    promotion_id:
+      asString(order.promotion_id ?? order.promotionId) || undefined,
+    promotion_code:
+      asString(order.promotion_code ?? order.promotionCode) || undefined,
+    points_used: asOptionalNumber(order.points_used ?? order.pointsUsed),
+    promotion_discount_amount: asOptionalNumber(
+      order.promotion_discount_amount ?? order.promotionDiscountAmount,
+    ),
+    point_discount_amount: asOptionalNumber(
+      order.point_discount_amount ?? order.pointDiscountAmount,
+    ),
+    subtotal_amount: asOptionalNumber(
+      order.subtotal_amount ?? order.subtotalAmount,
+    ),
+    total_discount_amount: asOptionalNumber(
+      order.total_discount_amount ?? order.totalDiscountAmount,
+    ),
     total_amount: asNumber(order.total_amount ?? order.totalAmount),
     shipping_address: asString(order.shipping_address ?? order.shippingAddress),
     payment_method: asString(order.payment_method ?? order.paymentMethod),
+    payment_status:
+      asString(order.payment_status ?? order.paymentStatus) || undefined,
     order_status: asString(order.order_status ?? order.orderStatus),
+    created_at: asString(order.created_at ?? order.createdAt) || undefined,
+    updated_at: asString(order.updated_at ?? order.updatedAt) || undefined,
+    order_date: asString(
+      order.order_date ??
+        order.orderDate ??
+        order.created_at ??
+        order.createdAt,
+    ),
+    total_items: asOptionalNumber(order.total_items ?? order.totalItems),
+    note: asString(order.note) || undefined,
     items: Array.isArray(order.items)
       ? order.items.map((entry) => normalizeOrderItem(entry))
       : [],
