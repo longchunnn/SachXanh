@@ -65,6 +65,30 @@ export async function loginWithEmailOrUsername(
   return normalized;
 }
 
+export async function loginWithGoogleIdToken(
+  firebaseIdToken: string,
+): Promise<LoginResponse> {
+  const idToken = String(firebaseIdToken || "").trim();
+  if (!idToken) {
+    throw new Error("Không lấy được Google ID token.");
+  }
+
+  const response = await axiosClient.post("/auth/google", {
+    id_token: idToken,
+  });
+
+  const normalized = normalizeLoginResponse(response);
+  if (!normalized.accessToken) {
+    throw new Error("Đăng nhập Google thất bại. Backend không trả về token.");
+  }
+  return normalized;
+}
+
+export async function getCurrentUserProfile(): Promise<ApiUser> {
+  const response = await axiosClient.get("/auth/me");
+  return normalizeUser(unwrapResult(response));
+}
+
 export async function registerAccount(
   payload: RegisterPayload,
 ): Promise<ApiUser> {
