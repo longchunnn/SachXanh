@@ -191,11 +191,7 @@ export default function SupportWidget() {
   }
 
   return (
-<<<<<<< HEAD
-    <div className="fixed bottom-5 right-5 z-60 flex flex-col items-end gap-3">
-=======
-    <div className="fixed bottom-24 right-5 z-[60] flex items-end gap-3">
->>>>>>> 4624158856041318f3ce348c77a3e8c7d221d55c
+    <div className="fixed bottom-24 right-5 z-[60] flex flex-col items-end gap-3">
       {isOpen ? (
         <div className="h-152 w-[24rem] overflow-hidden rounded-2xl border border-teal-100 bg-white shadow-2xl">
           <div className="flex items-center justify-between bg-teal-800 px-4 py-3 text-white">
