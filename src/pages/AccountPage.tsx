@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
 import { clearAccessToken, getAccessToken } from "../services/axiosClient";
@@ -48,6 +48,7 @@ type OrderRecord = {
   total_amount: number;
   shipping_address: string;
   payment_method: string;
+  payment_status?: string;
   order_status: string;
   items: OrderItem[];
 };
@@ -164,6 +165,42 @@ function isDeliveredStatus(orderStatus: string): boolean {
     .includes("đã giao");
 }
 
+function getPaymentStatusMeta(order: OrderRecord): {
+  label: string;
+  className: string;
+} {
+  const status = String(order.payment_status || "").trim().toLowerCase();
+  const orderStatus = String(order.order_status || "").trim().toLowerCase();
+  if (status.includes("paid") || status.includes("đã thanh toán")) {
+    return {
+      label: "Đã thanh toán",
+      className: "bg-emerald-100 text-emerald-700",
+    };
+  }
+  if (status.includes("failed") || status.includes("thất bại")) {
+    return {
+      label: "Thanh toán thất bại",
+      className: "bg-rose-100 text-rose-700",
+    };
+  }
+  if (orderStatus.includes("đang giao") || orderStatus.includes("shipping")) {
+    return {
+      label: "Đã thanh toán",
+      className: "bg-emerald-100 text-emerald-700",
+    };
+  }
+  if (String(order.payment_method || "").toLowerCase() === "vnpay") {
+    return {
+      label: "Chờ thanh toán VNPay",
+      className: "bg-amber-100 text-amber-700",
+    };
+  }
+  return {
+    label: "Thanh toán khi nhận hàng",
+    className: "bg-slate-100 text-slate-700",
+  };
+}
+
 function sortOrdersForDisplay(orderList: OrderRecord[]): OrderRecord[] {
   return orderList.slice().sort((left, right) => {
     const leftDelivered = isDeliveredStatus(left.order_status);
@@ -240,6 +277,7 @@ export default function AccountPage() {
     defaultValues: getDefaultForm(null),
   });
   const dispatch = useAppDispatch();
+  const location = useLocation();
   const sessionUserId = useAppSelector((state) => state.session.userId);
   const storedProfileForm = useAppSelector(
     (state) => state.session.profileForm as ProfileForm,
@@ -272,6 +310,7 @@ export default function AccountPage() {
   );
   const [selectedVoucher, setSelectedVoucher] =
     useState<VoucherWalletItem | null>(null);
+  const [handledVnpaySearch, setHandledVnpaySearch] = useState("");
 
   useEffect(() => {
     register("fullName", {
@@ -546,6 +585,75 @@ export default function AccountPage() {
       window.removeEventListener(ORDER_UPDATED_EVENT, onOrderUpdated);
     };
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (!location.search || handledVnpaySearch === location.search) return;
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get("source") !== "vnpay") return;
+
+    const callbackStatus = String(searchParams.get("status") || "").trim();
+    const orderId = String(searchParams.get("order_id") || "").trim();
+    setActiveSection("orders");
+    setShowAllOrders(true);
+    setHandledVnpaySearch(location.search);
+
+    if (callbackStatus === "success") {
+      toast.success(
+        orderId
+          ? `Đơn LL-${orderId} đã thanh toán thành công qua VNPay.`
+          : "Thanh toán VNPay thành công.",
+      );
+      if (!currentUserId) return;
+
+      // IPN from VNPay may arrive a few seconds after redirect callback.
+      // Poll briefly so customer sees the updated payment status right away.
+      const pollOrdersAfterVnpay = async () => {
+        const maxAttempts = 5;
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          try {
+            const response = await getOrders();
+            const nextOrders = Array.isArray(response)
+              ? response
+                  .filter((order) => String(order.user_id) === String(currentUserId))
+                  .slice()
+              : [];
+            const sortedOrders = sortOrdersForDisplay(nextOrders);
+            setOrders(sortedOrders);
+
+            const targetOrder = orderId
+              ? sortedOrders.find((order) => String(order.id) === String(orderId))
+              : sortedOrders[0];
+            const paymentStatus = String(targetOrder?.payment_status || "")
+              .trim()
+              .toLowerCase();
+            const orderStatus = String(targetOrder?.order_status || "")
+              .trim()
+              .toLowerCase();
+            const isPaid =
+              paymentStatus.includes("đã thanh toán") ||
+              paymentStatus.includes("paid") ||
+              orderStatus.includes("đang giao") ||
+              orderStatus.includes("shipping");
+
+            if (isPaid) {
+              break;
+            }
+          } catch {
+            // ignore transient polling errors
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      };
+
+      void pollOrdersAfterVnpay();
+      return;
+    }
+    if (callbackStatus === "invalid_signature") {
+      toast.warning("Không xác thực được callback VNPay. Vui lòng kiểm tra lại.");
+      return;
+    }
+    toast.info("Thanh toán VNPay chưa thành công. Bạn có thể thử lại.");
+  }, [currentUserId, handledVnpaySearch, location.search]);
 
   const menuItems = useMemo(
     () => [
@@ -1146,6 +1254,13 @@ export default function AccountPage() {
                               {order.order_status}
                             </span>
                           </div>
+                          <div className="mt-2">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusMeta(order).className}`}
+                            >
+                              {getPaymentStatusMeta(order).label}
+                            </span>
+                          </div>
                         </article>
                       ))}
                     </div>
@@ -1202,6 +1317,13 @@ export default function AccountPage() {
 
                         <span className="rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-700">
                           {order.order_status}
+                        </span>
+                      </div>
+                      <div className="mb-3">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusMeta(order).className}`}
+                        >
+                          {getPaymentStatusMeta(order).label}
                         </span>
                       </div>
 

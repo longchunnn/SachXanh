@@ -57,7 +57,9 @@ export type ApiOrder = {
   total_amount: number;
   shipping_address: string;
   payment_method: string;
+  payment_status?: string;
   order_status: string;
+  payment_url?: string;
   items: ApiOrderItem[];
 };
 
@@ -134,7 +136,9 @@ export function normalizeOrder(raw: unknown): ApiOrder {
     total_amount: asNumber(order.total_amount ?? order.totalAmount),
     shipping_address: asString(order.shipping_address ?? order.shippingAddress),
     payment_method: asString(order.payment_method ?? order.paymentMethod),
+    payment_status: asString(order.payment_status ?? order.paymentStatus),
     order_status: asString(order.order_status ?? order.orderStatus),
+    payment_url: asString(order.payment_url ?? order.paymentUrl),
     items: Array.isArray(order.items)
       ? order.items.map((entry) => normalizeOrderItem(entry))
       : [],
