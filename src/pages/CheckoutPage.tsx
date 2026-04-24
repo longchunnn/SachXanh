@@ -25,7 +25,7 @@ import type { CartItem } from "../features/cart/cartSlice";
 import { parseJwtPayload } from "../utils/jwt";
 
 type ShippingMethod = "standard" | "express";
-type PaymentMethod = "cod" | "prepaid";
+type PaymentMethod = "cod" | "vnpay";
 
 type SavedAddress = {
   id: string;
@@ -117,6 +117,10 @@ function findNameByCode(options: AdministrativeOption[], code: string): string {
   return options.find((item) => item.code === safeCode)?.name ?? "";
 }
 
+function isValidVietnamPhone(phone: string): boolean {
+  return /^0(?:3|5|7|8|9)\d{8}$/.test(phone.trim());
+}
+
 export default function CheckoutPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -155,6 +159,7 @@ export default function CheckoutPage() {
   });
   const [addressError, setAddressError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [submittingOrder, setSubmittingOrder] = useState(false);
 
   const [provinces, setProvinces] = useState<AdministrativeOption[]>([]);
   const [districts, setDistricts] = useState<AdministrativeOption[]>([]);
@@ -374,11 +379,26 @@ export default function CheckoutPage() {
   };
 
   const handleCompleteOrder = async () => {
-    if (!selectedAddress && !form.fullName.trim()) {
-      setAddressError(
-        "Vui lòng chọn địa chỉ đã lưu hoặc nhập địa chỉ giao hàng.",
-      );
-      return;
+    if (submittingOrder) return;
+    if (!selectedAddress) {
+      if (!form.fullName.trim()) {
+        setAddressError("Vui lòng nhập họ tên người nhận.");
+        return;
+      }
+      if (!isValidVietnamPhone(form.phone)) {
+        setAddressError(
+          "Số điện thoại nhận hàng không hợp lệ (10 số, bắt đầu bằng 03/05/07/08/09).",
+        );
+        return;
+      }
+      if (!form.addressLine.trim()) {
+        setAddressError("Vui lòng nhập địa chỉ chi tiết.");
+        return;
+      }
+      if (!form.provinceCode || !form.districtCode || !form.wardCode) {
+        setAddressError("Vui lòng chọn đầy đủ Tỉnh/Thành, Quận/Huyện và Phường/Xã.");
+        return;
+      }
     }
 
     const token = getAccessToken();
@@ -434,11 +454,28 @@ export default function CheckoutPage() {
     };
 
     try {
-      await createOrder(orderPayload);
+      setSubmittingOrder(true);
+      const createdOrder = await createOrder(orderPayload);
       window.dispatchEvent(new Event(ORDER_UPDATED_EVENT));
+
+      if (paymentMethod === "vnpay") {
+        const paymentUrl = String(createdOrder.payment_url || "").trim();
+        if (!paymentUrl) {
+          setAddressError(
+            "Không nhận được liên kết thanh toán VNPay từ hệ thống. Vui lòng thử lại.",
+          );
+          return;
+        }
+
+        dispatch(clearCheckoutSessionAction());
+        window.location.assign(paymentUrl);
+        return;
+      }
     } catch {
       setAddressError("Không thể lưu đơn hàng vào backend. Vui lòng thử lại.");
       return;
+    } finally {
+      setSubmittingOrder(false);
     }
 
     setAddressError("");
@@ -499,6 +536,7 @@ export default function CheckoutPage() {
               wards={wards}
               onAddNewAddress={() => {
                 setAddressError("");
+                dispatch(setSelectedAddressId(null));
                 setForm({
                   fullName: "",
                   phone: "",
@@ -523,9 +561,9 @@ export default function CheckoutPage() {
               }
               isAddressFormVisible={true}
               showHeader={false}
-              showAddButton={false}
+              showAddButton={savedAddresses.length > 0}
               showDeleteButton={false}
-              showAddressForm={false}
+              showAddressForm={true}
             />
 
             <p className="mt-2 text-xs text-gray-500">
@@ -595,14 +633,14 @@ export default function CheckoutPage() {
                 <input
                   type="radio"
                   name="payment"
-                  checked={paymentMethod === "prepaid"}
-                  onChange={() => setPaymentMethod("prepaid")}
+                  checked={paymentMethod === "vnpay"}
+                  onChange={() => setPaymentMethod("vnpay")}
                   className="mt-1 h-4 w-4 accent-teal-700"
                 />
                 <span className="text-sm text-gray-700">
-                  <strong>Thanh toán trước</strong>
+                  <strong>Thanh toán qua VNPay</strong>
                   <br />
-                  Chuyển khoản hoặc ví điện tử.
+                  Chuyển hướng qua cổng thanh toán VNPay.
                 </span>
               </label>
             </div>
@@ -666,9 +704,10 @@ export default function CheckoutPage() {
           <button
             type="button"
             onClick={handleCompleteOrder}
-            className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-amber-800 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700"
+            disabled={submittingOrder}
+            className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-amber-800 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Hoàn tất thanh toán
+            {submittingOrder ? "Đang xử lý..." : "Hoàn tất thanh toán"}
           </button>
 
           {successMessage ? (
