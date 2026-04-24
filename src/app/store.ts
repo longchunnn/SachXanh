@@ -7,6 +7,10 @@ import sessionReducer, {
 import cartReducer from "../features/cart/cartSlice";
 import booksReducer from "../features/books/booksSlice";
 import voucherReducer from "../features/voucher/voucherSlice";
+import adminStatsReducer from "../features/adminStats/adminStatsSlice";
+import adminBooksReducer from "../features/adminBooks/adminBooksSlice";
+import adminVouchersReducer from "../features/adminVouchers/adminVouchersSlice";
+import flashSaleAdminReducer from "../features/flashSaleAdmin/flashSaleAdminSlice";
 import { setStoreRef } from "./storeRef";
 
 const TOKEN_KEY = "access_token";
@@ -26,6 +30,11 @@ export const store = configureStore({
     voucher: voucherReducer,
     books: booksReducer,
     searchUi: searchUiReducer,
+
+    adminStats: adminStatsReducer,
+    adminBooks: adminBooksReducer,
+    adminVouchers: adminVouchersReducer,
+    flashSaleAdmin: flashSaleAdminReducer,
   },
 });
 

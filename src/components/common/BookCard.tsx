@@ -6,6 +6,7 @@ import { useAppDispatch } from "../../app/hooks";
 import { addCartItem } from "../../features/cart/cartSlice";
 import { isJwtExpired } from "../../utils/jwt";
 import { toast } from "react-toastify";
+import type { ReactNode } from "react";
 
 export type BookCardData = {
   id: string;
@@ -22,9 +23,15 @@ export type BookCardData = {
 
 type Props = {
   data: BookCardData;
+  action?: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    icon?: ReactNode;
+  };
 };
 
-export default function BookCard({ data }: Props) {
+export default function BookCard({ data, action }: Props) {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
@@ -57,6 +64,21 @@ export default function BookCard({ data }: Props) {
 
     toast.success("Thêm giỏ hàng thành công");
   };
+
+  const handleAction = () => {
+    if (action) {
+      action.onClick();
+      return;
+    }
+    handleAddToCart();
+  };
+
+  const actionLabel = action ? action.label : "Thêm giỏ hàng";
+  const actionIcon = action ? (
+    (action.icon ?? null)
+  ) : (
+    <ShoppingCartOutlined className="text-base" />
+  );
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-sm transition-shadow">
@@ -113,11 +135,12 @@ export default function BookCard({ data }: Props) {
         </div>
         <button
           type="button"
-          onClick={handleAddToCart}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-teal-700 bg-white px-4 py-2.5 text-sm font-semibold text-teal-700 transition-colors hover:bg-teal-50"
+          onClick={handleAction}
+          disabled={Boolean(action?.disabled)}
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-teal-700 bg-white px-4 py-2.5 text-sm font-semibold text-teal-700 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <ShoppingCartOutlined className="text-base" />
-          Thêm giỏ hàng
+          {actionIcon}
+          {actionLabel}
         </button>
       </div>
     </div>

@@ -34,6 +34,11 @@ export async function getBooksForStaff(params?: {
   return unwrapPagedContent<unknown>(response).map((entry) => normalizeBook(entry));
 }
 
+export async function createBook(payload: Record<string, unknown>): Promise<ApiBook> {
+  const response = await axiosClient.post("/books", payload);
+  return normalizeBook(unwrapResult(response));
+}
+
 export async function updateBookPartial(
   bookId: string,
   payload: Record<string, unknown>,
