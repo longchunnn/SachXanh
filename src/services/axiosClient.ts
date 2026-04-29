@@ -13,14 +13,16 @@ import {
   setClaimedVouchers,
 } from "../features/voucher/voucherSlice";
 
-const DEFAULT_BASE_URL = "http://localhost:8080/api/v1";
+const DEFAULT_BASE_URL = "http://localhost:8081/api/v1";
 const AUTH_TOKEN_KEY = "access_token";
 
-const baseURL =
+const rawBaseURL =
   (typeof import.meta !== "undefined" &&
     import.meta.env &&
     import.meta.env.VITE_API_BASE_URL) ||
   DEFAULT_BASE_URL;
+
+const baseURL = String(rawBaseURL).replace(/\/+$/, "");
 
 function normalizePrimaryRole(value: unknown): string {
   const safe = String(value || "").trim().toUpperCase();
