@@ -29,7 +29,6 @@ export type ChatConversation = {
   lastMessageAt?: { seconds?: number; nanoseconds?: number } | Date | null;
   unreadByUser?: number;
   unreadByStaff?: number;
-  labels?: string[];
 };
 
 export type ChatMessage = {
@@ -142,23 +141,6 @@ export async function sendConversationMessage(
     updatedAt: serverTimestamp(),
     unreadByUser: senderRole === "STAFF" ? 1 : 0,
     unreadByStaff: senderRole === "USER" ? 1 : 0,
-  });
-}
-
-
-export async function setConversationLabels(
-  conversationId: string,
-  labels: string[],
-): Promise<void> {
-  await ensureFirebaseChatLogin();
-  const { db } = requireFirebaseDb();
-  const normalizedLabels = Array.from(
-    new Set(labels.map((label) => String(label || "").trim()).filter(Boolean)),
-  );
-
-  await updateDoc(doc(db, "conversations", conversationId), {
-    labels: normalizedLabels,
-    updatedAt: serverTimestamp(),
   });
 }
 

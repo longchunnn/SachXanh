@@ -31,10 +31,6 @@ export type ApiBook = {
   description?: string;
   long_description?: string;
   gallery_images?: string[];
-  publisher_id?: number | null;
-  publication_year?: number | null;
-  language?: string;
-  status?: number;
 };
 
 export type ApiUser = {
@@ -43,10 +39,8 @@ export type ApiUser = {
   email: string;
   full_name: string;
   phone?: string;
-  address?: string;
   role_id?: number;
   status?: number;
-  total_points?: number;
 };
 
 export type ApiOrderItem = {
@@ -63,11 +57,9 @@ export type ApiOrder = {
   total_amount: number;
   shipping_address: string;
   payment_method: string;
-  order_status: string;
   payment_status?: string;
-  discount_amount?: number;
-  note?: string;
-  updated_at?: string;
+  order_status: string;
+  payment_url?: string;
   items: ApiOrderItem[];
 };
 
@@ -94,20 +86,6 @@ export function normalizeBook(raw: unknown): ApiBook {
           ? book.longDescription
           : undefined,
     gallery_images: asStringArray(book.gallery_images ?? book.galleryImages),
-    publisher_id:
-      book.publisher_id !== undefined
-        ? asNumber(book.publisher_id)
-        : book.publisherId !== undefined
-          ? asNumber(book.publisherId)
-          : null,
-    publication_year:
-      book.publication_year !== undefined
-        ? asNumber(book.publication_year)
-        : book.publicationYear !== undefined
-          ? asNumber(book.publicationYear)
-          : null,
-    language: asString(book.language),
-    status: book.status !== undefined ? asNumber(book.status) : 1,
   };
 }
 
@@ -120,7 +98,6 @@ export function normalizeUser(raw: unknown): ApiUser {
     email: asString(user.email),
     full_name: asString(user.full_name ?? user.fullName),
     phone: typeof user.phone === "string" ? user.phone : undefined,
-    address: asString(user.address),
     role_id:
       user.role_id !== undefined
         ? asNumber(user.role_id)
@@ -132,12 +109,6 @@ export function normalizeUser(raw: unknown): ApiUser {
         ? asNumber(user.status)
         : user.isActive !== undefined
           ? asNumber(user.isActive)
-          : undefined,
-    total_points:
-      user.total_points !== undefined
-        ? asNumber(user.total_points)
-        : user.totalPoints !== undefined
-          ? asNumber(user.totalPoints)
           : undefined,
   };
 }
@@ -165,11 +136,9 @@ export function normalizeOrder(raw: unknown): ApiOrder {
     total_amount: asNumber(order.total_amount ?? order.totalAmount),
     shipping_address: asString(order.shipping_address ?? order.shippingAddress),
     payment_method: asString(order.payment_method ?? order.paymentMethod),
-    order_status: asString(order.order_status ?? order.orderStatus),
     payment_status: asString(order.payment_status ?? order.paymentStatus),
-    discount_amount: asNumber(order.discount_amount ?? order.discountAmount),
-    note: asString(order.note),
-    updated_at: asString(order.updated_at ?? order.updatedAt),
+    order_status: asString(order.order_status ?? order.orderStatus),
+    payment_url: asString(order.payment_url ?? order.paymentUrl),
     items: Array.isArray(order.items)
       ? order.items.map((entry) => normalizeOrderItem(entry))
       : [],
