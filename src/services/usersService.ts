@@ -22,3 +22,14 @@ export async function getUsersForStaff(params?: {
   });
   return unwrapPagedContent<unknown>(response).map((entry) => normalizeUser(entry));
 }
+
+export async function updateUser(
+  userId: string,
+  payload: Partial<Pick<ApiUser, "full_name" | "email" | "phone" | "address">>,
+): Promise<ApiUser> {
+  const response = await axiosClient.patch(
+    `/users/${encodeURIComponent(userId)}`,
+    payload,
+  );
+  return normalizeUser(unwrapResult(response));
+}

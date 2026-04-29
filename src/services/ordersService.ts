@@ -1,5 +1,9 @@
 import axiosClient from "./axiosClient";
-import { normalizeOrder, type ApiOrder } from "../utils/apiMappers";
+import {
+  extractPaymentUrl,
+  normalizeOrder,
+  type ApiOrder,
+} from "../utils/apiMappers";
 import { unwrapPagedContent, unwrapResult } from "../utils/apiResponse";
 
 type CreateOrderPayload = Record<string, unknown>;
@@ -20,7 +24,19 @@ export async function createOrder(
   payload: CreateOrderPayload,
 ): Promise<ApiOrder> {
   const response = await axiosClient.post("/orders", payload);
-  return normalizeOrder(unwrapResult(response));
+  const result = unwrapResult(response);
+  const normalizedOrder = normalizeOrder(result);
+
+  // Một số backend trả order trong `result` nhưng trả link VNPay ở tầng ngoài
+  // hoặc dùng tên field khác như `redirectUrl`, `vnpayUrl`, `payUrl`.
+  // Giữ nguyên dữ liệu order, chỉ bổ sung payment_url để checkout redirect được.
+  return {
+    ...normalizedOrder,
+    payment_url:
+      normalizedOrder.payment_url ||
+      extractPaymentUrl(result) ||
+      extractPaymentUrl(response),
+  };
 }
 
 export async function getOrdersForStaff(params?: {

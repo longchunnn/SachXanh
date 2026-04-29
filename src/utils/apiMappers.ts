@@ -1,5 +1,66 @@
 type AnyRecord = Record<string, unknown>;
 
+function asRecord(value: unknown): AnyRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as AnyRecord)
+    : null;
+}
+
+function findStringByKeys(
+  raw: unknown,
+  keys: string[],
+  maxDepth = 4,
+  visited = new WeakSet<object>(),
+): string {
+  const record = asRecord(raw);
+  if (!record || maxDepth < 0) return "";
+
+  if (visited.has(record)) return "";
+  visited.add(record);
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+
+  for (const value of Object.values(record)) {
+    const nested = asRecord(value);
+    if (!nested) continue;
+
+    const found = findStringByKeys(nested, keys, maxDepth - 1, visited);
+    if (found) return found;
+  }
+
+  return "";
+}
+
+export function extractPaymentUrl(raw: unknown): string {
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+
+  return findStringByKeys(raw, [
+    "payment_url",
+    "paymentUrl",
+    "paymentURL",
+    "payment_link",
+    "paymentLink",
+    "vnpay_url",
+    "vnpayUrl",
+    "vnPayUrl",
+    "vnpayPaymentUrl",
+    "vnPayPaymentUrl",
+    "vnpay_payment_url",
+    "redirect_url",
+    "redirectUrl",
+    "checkout_url",
+    "checkoutUrl",
+    "payUrl",
+    "pay_url",
+    "url",
+    "link",
+  ]);
+}
+
 function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -31,6 +92,10 @@ export type ApiBook = {
   description?: string;
   long_description?: string;
   gallery_images?: string[];
+  publisher_id?: number | null;
+  publication_year?: number | null;
+  language?: string;
+  status?: number;
 };
 
 export type ApiUser = {
@@ -39,8 +104,10 @@ export type ApiUser = {
   email: string;
   full_name: string;
   phone?: string;
+  address?: string;
   role_id?: number;
   status?: number;
+  total_points?: number;
 };
 
 export type ApiOrderItem = {
@@ -57,9 +124,12 @@ export type ApiOrder = {
   total_amount: number;
   shipping_address: string;
   payment_method: string;
-  payment_status?: string;
   order_status: string;
+  payment_status?: string;
   payment_url?: string;
+  discount_amount?: number;
+  note?: string;
+  updated_at?: string;
   items: ApiOrderItem[];
 };
 
@@ -86,6 +156,20 @@ export function normalizeBook(raw: unknown): ApiBook {
           ? book.longDescription
           : undefined,
     gallery_images: asStringArray(book.gallery_images ?? book.galleryImages),
+    publisher_id:
+      book.publisher_id !== undefined
+        ? asNumber(book.publisher_id)
+        : book.publisherId !== undefined
+          ? asNumber(book.publisherId)
+          : null,
+    publication_year:
+      book.publication_year !== undefined
+        ? asNumber(book.publication_year)
+        : book.publicationYear !== undefined
+          ? asNumber(book.publicationYear)
+          : null,
+    language: asString(book.language),
+    status: book.status !== undefined ? asNumber(book.status) : 1,
   };
 }
 
@@ -98,6 +182,7 @@ export function normalizeUser(raw: unknown): ApiUser {
     email: asString(user.email),
     full_name: asString(user.full_name ?? user.fullName),
     phone: typeof user.phone === "string" ? user.phone : undefined,
+    address: asString(user.address),
     role_id:
       user.role_id !== undefined
         ? asNumber(user.role_id)
@@ -109,6 +194,12 @@ export function normalizeUser(raw: unknown): ApiUser {
         ? asNumber(user.status)
         : user.isActive !== undefined
           ? asNumber(user.isActive)
+          : undefined,
+    total_points:
+      user.total_points !== undefined
+        ? asNumber(user.total_points)
+        : user.totalPoints !== undefined
+          ? asNumber(user.totalPoints)
           : undefined,
   };
 }
@@ -127,20 +218,39 @@ export function normalizeOrderItem(raw: unknown): ApiOrderItem {
 }
 
 export function normalizeOrder(raw: unknown): ApiOrder {
-  const order = (raw ?? {}) as AnyRecord;
+  const envelope = asRecord(raw) ?? {};
+  const order =
+    asRecord(envelope.order) ??
+    asRecord(envelope.orderDto) ??
+    asRecord(envelope.orderDTO) ??
+    asRecord(envelope.orderResponse) ??
+    asRecord(envelope.orderData) ??
+    asRecord(envelope.data) ??
+    envelope;
+
+  const itemsRaw =
+    order.items ??
+    order.orderItems ??
+    order.order_details ??
+    order.orderDetails ??
+    envelope.items ??
+    envelope.orderItems;
 
   return {
-    id: asString(order.id),
+    id: asString(order.id ?? order.order_id ?? order.orderId),
     user_id: asString(order.user_id ?? order.userId),
-    order_date: asString(order.order_date ?? order.orderDate),
-    total_amount: asNumber(order.total_amount ?? order.totalAmount),
+    order_date: asString(order.order_date ?? order.orderDate ?? order.created_at ?? order.createdAt),
+    total_amount: asNumber(order.total_amount ?? order.totalAmount ?? order.amount),
     shipping_address: asString(order.shipping_address ?? order.shippingAddress),
     payment_method: asString(order.payment_method ?? order.paymentMethod),
+    order_status: asString(order.order_status ?? order.orderStatus ?? order.status),
     payment_status: asString(order.payment_status ?? order.paymentStatus),
-    order_status: asString(order.order_status ?? order.orderStatus),
-    payment_url: asString(order.payment_url ?? order.paymentUrl),
-    items: Array.isArray(order.items)
-      ? order.items.map((entry) => normalizeOrderItem(entry))
+    payment_url: extractPaymentUrl(raw),
+    discount_amount: asNumber(order.discount_amount ?? order.discountAmount),
+    note: asString(order.note),
+    updated_at: asString(order.updated_at ?? order.updatedAt),
+    items: Array.isArray(itemsRaw)
+      ? itemsRaw.map((entry) => normalizeOrderItem(entry))
       : [],
   };
 }
