@@ -45,7 +45,9 @@ export async function loginWithEmailOrUsername(
       username: account,
       password: safePassword,
     });
+    console.log("👀 Raw response from /auth/login:", response);
   } catch (error) {
+    console.error("❌ Error during /auth/login request:", error);
     if (import.meta.env.DEV) {
       console.error("❌ loginWithEmailOrUsername failed:", error);
     }

@@ -4,11 +4,13 @@ import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
 import { clearAccessToken, getAccessToken } from "../services/axiosClient";
 import { getBooks } from "../services/booksService";
-import { getOrders } from "../services/ordersService";
+import { getOrdersForStaff } from "../services/ordersService";
 import { getUserById } from "../services/usersService";
+import { getVouchers } from "../services/vouchersService";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
 import ShippingAddressSection from "../components/common/ShippingAddressSection";
+import VoucherDetailModal from "../components/common/VoucherDetailModal";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import {
   setAvatarSrc as setAvatarSrcAction,
@@ -64,18 +66,20 @@ type DbBookItem = {
   book_id: string | number;
 };
 
-type DbPromotionDetail = {
+type PromotionRecord = {
   id: string;
   code: string;
-  title: string;
-  subtitle?: string;
-  discount_percent: number;
-  voucher_type?: "discount" | "freeship";
-  applies_to_categories?: string[];
-  condition_text?: string;
-  valid_from?: string;
-  valid_to?: string;
-  terms?: string;
+  title?: string;
+  description?: string;
+  discountPercent: number;
+  maxDiscountAmount?: number;
+  minOrderValue?: number;
+  usageLimit?: number;
+  usedCount: number;
+  startDate?: string;
+  endDate?: string;
+  status: number;
+  applicableCategories: string[];
 };
 
 type ProfileForm = {
@@ -127,20 +131,6 @@ function formatDate(dateText: string): string {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(date);
-}
-
-function formatDateTime(dateText?: string): string {
-  if (!dateText) return "Chưa cập nhật";
-  const date = new Date(dateText);
-  if (Number.isNaN(date.getTime())) return dateText;
-
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   }).format(date);
 }
 
@@ -240,9 +230,6 @@ export default function AccountPage() {
   });
   const dispatch = useAppDispatch();
   const sessionUserId = useAppSelector((state) => state.session.userId);
-  const storedProfileForm = useAppSelector(
-    (state) => state.session.profileForm as ProfileForm,
-  );
   const avatarSrc = useAppSelector((state) => state.session.avatarSrc);
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<SectionKey>("profile");
@@ -250,7 +237,7 @@ export default function AccountPage() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [books, setBooks] = useState<DbBook[]>([]);
   const [bookItems, setBookItems] = useState<DbBookItem[]>([]);
-  const [promotions, setPromotions] = useState<DbPromotionDetail[]>([]);
+  const [promotions, setPromotions] = useState<PromotionRecord[]>([]);
   const vouchers = useAppSelector(
     (state) => state.voucher.claimedVouchers as VoucherWalletItem[],
   );
@@ -265,13 +252,32 @@ export default function AccountPage() {
   const savedAddresses = useAppSelector(
     (state) => state.session.savedAddresses as SavedAddress[],
   );
+  const savedAddressesRef = useRef(savedAddresses);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const selectedAddressId = useAppSelector(
     (state) => state.session.selectedAddressId,
   );
   const [selectedVoucher, setSelectedVoucher] =
     useState<VoucherWalletItem | null>(null);
-  const lastLoadedSessionUserIdRef = useRef<string | null>(null);
+  const isDev =
+    typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+
+  useEffect(() => {
+    savedAddressesRef.current = savedAddresses;
+  }, [savedAddresses]);
+
+  useEffect(() => {
+    if (!isDev) return;
+    console.info("[AccountPage] loading state watcher mounted");
+    return () => {
+      console.info("[AccountPage] loading state watcher unmounted");
+    };
+  }, [isDev]);
+
+  useEffect(() => {
+    if (!isDev) return;
+    console.info("[AccountPage] loading changed", { loading });
+  }, [isDev, loading]);
 
   useEffect(() => {
     register("fullName", {
@@ -390,16 +396,34 @@ export default function AccountPage() {
   }, [form.shippingDistrict]);
 
   useEffect(() => {
-    if (lastLoadedSessionUserIdRef.current === sessionUserId) return;
-    lastLoadedSessionUserIdRef.current = sessionUserId ?? null;
-
     let isMounted = true;
 
     async function loadData() {
       setLoading(true);
+      const isDev =
+        typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+      if (isDev) {
+        console.info("[AccountPage] loadData start");
+      }
+      let loadWatchdog: ReturnType<typeof setTimeout> | null = null;
+      // If loading takes too long, stop spinner and show an error so user isn't stuck.
+      loadWatchdog = setTimeout(() => {
+        if (isMounted) {
+          setLoading(false);
+          try {
+            toast.error(
+              "Thời gian chờ tải thông tin tài khoản vượt quá. Vui lòng thử lại.",
+            );
+          } catch (e) {
+            void e;
+          }
+        }
+      }, 10000);
       const token = getAccessToken();
       const payload = token ? parseJwtPayload(token) : null;
-      const userId = sessionUserId || String(payload?.user_id ?? payload?.sub ?? "");
+      const userId =
+        sessionUserId || String(payload?.user_id ?? payload?.sub ?? "");
+
       const tokenFullName =
         typeof payload?.full_name === "string" ? payload.full_name : "";
       const tokenUsername =
@@ -417,27 +441,51 @@ export default function AccountPage() {
       }
 
       try {
-        const [foundUser, ordersResponse, nextBooks] = await Promise.all([
-          getUserById(userId),
-          getOrders(),
-          getBooks(),
-        ]);
+        const [foundUser, ordersResponse, nextBooks, nextPromotions] =
+          await Promise.all([
+            getUserById(userId),
+            getOrdersForStaff({ userId }),
+            getBooks(),
+            getVouchers().catch(() => []),
+          ]);
 
         if (!isMounted) return;
 
+        if (isDev) {
+          console.info("[AccountPage] received data, updating state");
+        }
+
         const nextOrders = Array.isArray(ordersResponse)
-          ? ordersResponse
-              .filter((order) => String(order.user_id) === String(userId))
-              .slice()
+          ? ordersResponse.slice()
           : [];
 
         setUser(foundUser);
         setOrders(sortOrdersForDisplay(nextOrders));
         setBooks(nextBooks);
         setBookItems([]);
-        setPromotions([]);
+        setPromotions(
+          Array.isArray(nextPromotions)
+            ? nextPromotions.map((voucher) => ({
+                id: voucher.promotionId,
+                code: voucher.code,
+                title: voucher.title,
+                description: voucher.description,
+                discountPercent: voucher.discountPercent,
+                maxDiscountAmount: voucher.maxDiscountAmount,
+                minOrderValue: voucher.minOrderValue,
+                usageLimit: voucher.usageLimit,
+                usedCount: voucher.usedCount,
+                startDate: voucher.startDate,
+                endDate: voucher.endDate,
+                status: voucher.status,
+                applicableCategories: voucher.applicableCategories,
+              }))
+            : [],
+        );
 
-        const allSavedAddresses = normalizeSavedAddresses(savedAddresses);
+        const allSavedAddresses = normalizeSavedAddresses(
+          savedAddressesRef.current,
+        );
         const savedAddress = getPreferredAddress(allSavedAddresses);
         const fallbackForm = foundUser
           ? getDefaultForm(foundUser)
@@ -459,16 +507,30 @@ export default function AccountPage() {
             }
           : fallbackForm;
 
-        if (JSON.stringify(allSavedAddresses) !== JSON.stringify(savedAddresses)) {
+        if (
+          JSON.stringify(allSavedAddresses) !==
+          JSON.stringify(savedAddressesRef.current)
+        ) {
           dispatch(setSavedAddresses(allSavedAddresses));
         }
         dispatch(setSelectedAddressId(savedAddress?.id ?? null));
         setEditingAddressId(savedAddress?.id ?? null);
         setIsAddressFormVisible(false);
-        setForm(storedProfileForm ?? fallbackWithSavedAddress);
-      } catch {
+        setForm(fallbackWithSavedAddress);
+      } catch (err: unknown) {
+        const isDevErr =
+          typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+        if (isDevErr) {
+          console.error("[AccountPage] loadData error", err);
+        }
         if (!isMounted) return;
-        const allSavedAddresses = normalizeSavedAddresses(savedAddresses);
+        toast.error(
+          "Không tải được thông tin tài khoản. Vui lòng thử lại sau.",
+        );
+
+        const allSavedAddresses = normalizeSavedAddresses(
+          savedAddressesRef.current,
+        );
         const savedAddress = getPreferredAddress(allSavedAddresses);
         const fallback = {
           ...getDefaultForm(null),
@@ -488,15 +550,21 @@ export default function AccountPage() {
             }
           : fallback;
 
-        if (JSON.stringify(allSavedAddresses) !== JSON.stringify(savedAddresses)) {
+        if (
+          JSON.stringify(allSavedAddresses) !==
+          JSON.stringify(savedAddressesRef.current)
+        ) {
           dispatch(setSavedAddresses(allSavedAddresses));
         }
         dispatch(setSelectedAddressId(savedAddress?.id ?? null));
         setEditingAddressId(savedAddress?.id ?? null);
         setIsAddressFormVisible(false);
-        setForm(storedProfileForm ?? fallbackWithSavedAddress);
+        setForm(fallbackWithSavedAddress);
       } finally {
+        if (loadWatchdog) clearTimeout(loadWatchdog);
         if (isMounted) {
+          if (isDev)
+            console.info("[AccountPage] setting loading=false in finally");
           setLoading(false);
         }
       }
@@ -507,7 +575,7 @@ export default function AccountPage() {
     return () => {
       isMounted = false;
     };
-  }, [dispatch, savedAddresses, sessionUserId, storedProfileForm]);
+  }, [dispatch, sessionUserId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -516,13 +584,11 @@ export default function AccountPage() {
 
     const refreshOrders = async () => {
       try {
-        const response = await getOrders();
+        const response = await getOrdersForStaff({ userId: currentUserId });
 
         if (disposed || !Array.isArray(response)) return;
 
-        const nextOrders = response
-          .filter((order) => String(order.user_id) === String(currentUserId))
-          .slice();
+        const nextOrders = response.slice();
 
         setOrders(sortOrdersForDisplay(nextOrders));
       } catch {
@@ -895,6 +961,9 @@ export default function AccountPage() {
     user?.full_name || tokenDisplayName || form.fullName || "Khách hàng";
   const recentOrders = orders.slice(0, 2);
   const visibleOrders = showAllOrders ? orders : orders.slice(0, 6);
+  const selectedVoucherDetail = selectedVoucher
+    ? (promotions.find((item) => item.id === selectedVoucher.id) ?? null)
+    : null;
   const booksById = useMemo(
     () => new Map(books.map((book) => [String(book.id), book])),
     [books],
@@ -903,16 +972,8 @@ export default function AccountPage() {
     () => new Map(bookItems.map((item) => [String(item.id), item])),
     [bookItems],
   );
-  const promotionsById = useMemo(
-    () =>
-      new Map(promotions.map((promotion) => [String(promotion.id), promotion])),
-    [promotions],
-  );
-  const selectedPromotionDetail = selectedVoucher
-    ? (promotionsById.get(String(selectedVoucher.id)) ?? null)
-    : null;
   const isSelectedVoucherExpiringSoon = isVoucherExpiringSoon(
-    selectedPromotionDetail?.valid_to,
+    selectedVoucherDetail?.endDate,
   );
 
   const isDeliveredOrder = (orderStatus: string): boolean =>
@@ -1400,65 +1461,13 @@ export default function AccountPage() {
         </div>
       </main>
 
-      {selectedVoucher ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
-          <div className="w-full max-w-lg border border-gray-200 bg-white p-5 shadow-xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-xl font-bold text-teal-900">
-                  {selectedVoucher.title}
-                </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Mã: {selectedVoucher.code}
-                </p>
-                {isSelectedVoucherExpiringSoon ? (
-                  <span className="mt-2 inline-block bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-                    Sắp hết hạn
-                  </span>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedVoucher(null)}
-                className="border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Đóng
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3 text-sm text-gray-700">
-              <p>
-                <span className="font-semibold">Mức ưu đãi:</span>{" "}
-                {selectedVoucher.voucher_type === "freeship"
-                  ? "Giảm 100% phí vận chuyển"
-                  : `Giảm ${selectedVoucher.discount_percent}%`}
-              </p>
-              <p>
-                <span className="font-semibold">Điều kiện áp dụng:</span>{" "}
-                {selectedPromotionDetail?.condition_text ??
-                  selectedVoucher.subtitle}
-              </p>
-              <p>
-                <span className="font-semibold">Danh mục áp dụng:</span>{" "}
-                {(
-                  selectedPromotionDetail?.applies_to_categories ??
-                  selectedVoucher.applies_to_categories
-                ).join(", ")}
-              </p>
-              <p>
-                <span className="font-semibold">Thời gian hiệu lực:</span>{" "}
-                {formatDateTime(selectedPromotionDetail?.valid_from)} -{" "}
-                {formatDateTime(selectedPromotionDetail?.valid_to)}
-              </p>
-              <p>
-                <span className="font-semibold">Điều khoản:</span>{" "}
-                {selectedPromotionDetail?.terms ??
-                  "Áp dụng theo chính sách của chương trình khuyến mãi."}
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <VoucherDetailModal
+        isOpen={Boolean(selectedVoucher)}
+        onClose={() => setSelectedVoucher(null)}
+        voucher={selectedVoucher}
+        promotionDetail={selectedVoucherDetail}
+        isExpiringSoon={isSelectedVoucherExpiringSoon}
+      />
 
       <Footer />
     </div>

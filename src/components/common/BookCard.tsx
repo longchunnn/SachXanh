@@ -19,6 +19,7 @@ export type BookCardData = {
   coverSrc?: string;
   rating?: number;
   ratingCount?: number;
+  flashMeta?: string;
 };
 
 type Props = {
@@ -104,6 +105,11 @@ export default function BookCard({ data, action }: Props) {
             title={data.author}
           >
             {data.author}
+          </div>
+        ) : null}
+        {data.flashMeta ? (
+          <div className="mt-2 inline-flex rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+            {data.flashMeta}
           </div>
         ) : null}
         <div className="mt-3 flex items-end justify-between gap-2">

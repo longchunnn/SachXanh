@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { normalizeRole } from "../utils/roles";
 import { parseJwtPayload } from "../utils/jwt";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRightOutlined, BookOutlined } from "@ant-design/icons";
 import { loginWithEmailOrUsername } from "../services/authService";
 import { setAccessToken } from "../services/axiosClient";
@@ -16,6 +16,7 @@ type LoginFormValues = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     register,
     handleSubmit,
@@ -44,7 +45,29 @@ export default function LoginPage() {
       const payload = parseJwtPayload(response.accessToken);
       const primaryRole = normalizeRole(payload?.primary_role);
       toast.success("Đăng nhập thành công");
-      navigate(primaryRole === "ADMIN" || primaryRole === "STAFF" || primaryRole === "MANAGER" ? "/staff" : "/");
+
+      const fromPath = (
+        location.state as { from?: { pathname?: string } } | null
+      )?.from?.pathname;
+
+      const defaultTarget =
+        primaryRole === "ADMIN"
+          ? "/admin"
+          : primaryRole === "STAFF" || primaryRole === "MANAGER"
+            ? "/staff"
+            : "/";
+
+      const canUseFromPath =
+        typeof fromPath === "string" &&
+        (fromPath.startsWith("/admin")
+          ? primaryRole === "ADMIN"
+          : fromPath.startsWith("/staff")
+            ? primaryRole === "ADMIN" ||
+              primaryRole === "STAFF" ||
+              primaryRole === "MANAGER"
+            : true);
+
+      navigate(canUseFromPath ? fromPath! : defaultTarget, { replace: true });
     } catch (error) {
       const message =
         error instanceof Error

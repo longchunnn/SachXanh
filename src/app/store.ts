@@ -11,6 +11,7 @@ import adminStatsReducer from "../features/adminStats/adminStatsSlice";
 import adminBooksReducer from "../features/adminBooks/adminBooksSlice";
 import adminVouchersReducer from "../features/adminVouchers/adminVouchersSlice";
 import flashSaleAdminReducer from "../features/flashSaleAdmin/flashSaleAdminSlice";
+import flashSaleReducer from "../features/flashSale/flashSaleSlice";
 import { setStoreRef } from "./storeRef";
 
 const TOKEN_KEY = "access_token";
@@ -35,6 +36,7 @@ export const store = configureStore({
     adminBooks: adminBooksReducer,
     adminVouchers: adminVouchersReducer,
     flashSaleAdmin: flashSaleAdminReducer,
+    flashSale: flashSaleReducer,
   },
 });
 

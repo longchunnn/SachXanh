@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { type ApiBook } from "../../utils/apiMappers";
 import { getBookById, getBooks } from "../../services/booksService";
+import { getVouchers } from "../../services/vouchersService";
 
 type DbPromotion = {
   id: string;
@@ -8,12 +9,17 @@ type DbPromotion = {
   subtitle: string;
   code: string;
   discount_percent: number;
+  max_discount_amount?: number;
+  min_order_value?: number;
+  usage_limit?: number;
+  used_count?: number;
+  status?: number;
   applies_to_categories?: string[];
   voucher_type?: "discount" | "freeship";
-  condition_text?: string;
   valid_from?: string;
   valid_to?: string;
-  terms?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 type DbReview = {
@@ -39,11 +45,33 @@ export type BooksState = {
 };
 
 export const fetchCatalog = createAsyncThunk("books/fetchCatalog", async () => {
-  const booksResponse = await getBooks();
+  const [booksResponse, vouchersResponse] = await Promise.all([
+    getBooks(),
+    getVouchers().catch(() => []),
+  ]);
 
   return {
     books: Array.isArray(booksResponse) ? booksResponse : [],
-    promotions: [],
+    promotions: Array.isArray(vouchersResponse)
+      ? vouchersResponse.map((v) => ({
+          id: v.promotionId,
+          title: v.title || "",
+          subtitle: v.description || "",
+          code: v.code,
+          discount_percent: v.discountPercent,
+          max_discount_amount: v.maxDiscountAmount,
+          min_order_value: v.minOrderValue,
+          usage_limit: v.usageLimit,
+          used_count: v.usedCount,
+          status: v.status,
+          applies_to_categories: v.applicableCategories,
+          voucher_type: "discount" as const,
+          valid_from: v.startDate,
+          valid_to: v.endDate,
+          created_at: v.createdAt,
+          updated_at: v.updatedAt,
+        }))
+      : [],
     reviews: [],
   };
 });

@@ -1,5 +1,6 @@
 import axios from "axios";
 import { isJwtExpired, parseJwtPayload } from "../utils/jwt";
+import { normalizeRole } from "../utils/roles";
 import { getStoreRef } from "../app/storeRef";
 import { clearSession, hydrateSession } from "../features/session/sessionSlice";
 import {
@@ -22,20 +23,18 @@ const baseURL =
     import.meta.env.VITE_API_BASE_URL) ||
   DEFAULT_BASE_URL;
 
-function normalizePrimaryRole(value: unknown): string {
-  const safe = String(value || "").trim().toUpperCase();
-  if (!safe) return "";
-  return safe.startsWith("ROLE_") ? safe.slice(5) : safe;
-}
-
 function normalizeRoles(raw: unknown, primaryRole = ""): string[] {
   const roles = Array.isArray(raw)
-    ? raw.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)
+    ? raw
+        .map((value) => normalizeRole(value))
+        .filter(Boolean)
+        .map((value) => `ROLE_${value}`)
     : [];
 
-  const normalizedPrimaryRole = normalizePrimaryRole(primaryRole);
-  if (normalizedPrimaryRole && !roles.includes(`ROLE_${normalizedPrimaryRole}`)) {
-    roles.push(`ROLE_${normalizedPrimaryRole}`);
+  const normalizedPrimaryRole = normalizeRole(primaryRole);
+  if (normalizedPrimaryRole) {
+    const entry = `ROLE_${normalizedPrimaryRole}`;
+    if (!roles.includes(entry)) roles.push(entry);
   }
 
   return roles;
@@ -88,7 +87,7 @@ export function setAccessToken(token: string | null): void {
   const username =
     typeof payload?.username === "string" ? payload.username : "";
   const email = typeof payload?.email === "string" ? payload.email : "";
-  const primaryRole = normalizePrimaryRole(payload?.primary_role);
+  const primaryRole = normalizeRole(payload?.primary_role);
   const roles = normalizeRoles(payload?.roles, primaryRole);
   const displayName = fullName || username;
 
@@ -217,15 +216,51 @@ axiosClient.interceptors.request.use(
       }
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    const isDev =
+      typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+    if (isDev) {
+      console.info("[axios request]", {
+        method: config.method,
+        url: config.url,
+        headers: config.headers,
+        params: config.params,
+        data: config.data,
+      });
+    }
+
     return config;
   },
-  (error: unknown) => Promise.reject(normalizeAxiosError(error)),
+  (error: unknown) => {
+    const isDev =
+      typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+    if (isDev) {
+      console.error("[axios request error]", error);
+    }
+    return Promise.reject(normalizeAxiosError(error));
+  },
 );
 
 axiosClient.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    const isDev =
+      typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+    if (isDev) {
+      console.info("[axios response]", {
+        url: response.config?.url,
+        status: response.status,
+        data: response.data,
+      });
+    }
+    return response.data;
+  },
   (error: unknown) => {
     const err = error as { response?: { status?: number } };
+    const isDev =
+      typeof import.meta !== "undefined" && Boolean(import.meta.env?.DEV);
+    if (isDev) {
+      console.error("[axios response error]", error);
+    }
     if (err?.response?.status === 401) {
       clearAccessToken();
     }

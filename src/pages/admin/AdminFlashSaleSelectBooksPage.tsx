@@ -4,6 +4,7 @@ import { Pagination } from "antd";
 import { toast } from "react-toastify";
 import Find from "../../components/common/Find";
 import BookCard, { type BookCardData } from "../../components/common/BookCard";
+import FlashSaleConfigModal from "../../components/admin/FlashSaleConfigModal";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { fetchAdminBooks } from "../../features/adminBooks/adminBooksSlice";
 import type { ApiBook } from "../../utils/apiMappers";
@@ -239,6 +240,9 @@ export default function AdminFlashSaleSelectBooksPage() {
     return new Set((initial.selectedBookIds ?? []).map(String));
   });
 
+  const [bookToConfig, setBookToConfig] = useState<ApiBook | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedBooks = sortedBooks.slice(
     startIndex,
@@ -246,26 +250,30 @@ export default function AdminFlashSaleSelectBooksPage() {
   );
 
   const handleAdd = (book: ApiBook) => {
+    setBookToConfig(book);
+    setIsModalOpen(true);
+  };
+
+  const handleModalSubmit = (config: { flash_price: string; flash_stock: string; purchase_limit: string }) => {
+    if (!bookToConfig) return;
+
     const current = readDraft();
     const currentIds = Array.isArray(current.selectedBookIds)
       ? current.selectedBookIds.map(String)
       : [];
 
-    const bookId = String(book.id);
+    const bookId = String(bookToConfig.id);
     if (currentIds.includes(bookId)) {
       toast.info("Sách đã có trong danh sách.");
+      setIsModalOpen(false);
+      setBookToConfig(null);
       return;
     }
 
     const nextIds = [...currentIds, bookId];
     const nextConfig = {
       ...(current.itemConfigByBookId ?? {}),
-      [bookId]: current.itemConfigByBookId?.[bookId] ?? {
-        flash_price: "",
-        flash_stock: "50",
-        purchase_limit: "2",
-        afterStatus: "restore",
-      },
+      [bookId]: config,
     };
 
     writeDraft({
@@ -275,6 +283,8 @@ export default function AdminFlashSaleSelectBooksPage() {
     });
 
     setSelectedIds(new Set(nextIds));
+    setIsModalOpen(false);
+    setBookToConfig(null);
 
     toast.success("Đã thêm vào chiến dịch.");
   };
@@ -300,6 +310,15 @@ export default function AdminFlashSaleSelectBooksPage() {
 
   return (
     <div className="space-y-5">
+      <FlashSaleConfigModal
+        isOpen={isModalOpen}
+        book={bookToConfig}
+        onClose={() => {
+          setIsModalOpen(false);
+          setBookToConfig(null);
+        }}
+        onSubmit={handleModalSubmit}
+      />
       <div className="flex flex-col gap-2">
         <div className="text-sm font-semibold text-gray-500">
           <Link to="/admin/flash-sale" className="hover:text-teal-800">

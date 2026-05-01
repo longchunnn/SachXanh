@@ -8,6 +8,7 @@ import {
 } from "@ant-design/icons";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import { fetchBookDetail } from "../features/books/booksSlice";
+import { fetchActiveCampaign } from "../features/flashSale/flashSaleSlice";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
 import BookCard, { type BookCardData } from "../components/common/BookCard";
@@ -91,11 +92,33 @@ export default function BookDetailPage() {
   const modalThumbsRef = useRef<HTMLDivElement | null>(null);
   const loading = useAppSelector((state) => state.books.detailLoading);
   const error = useAppSelector((state) => state.books.detailError);
+  const flashSaleState = useAppSelector((state) => state.flashSale);
 
   useEffect(() => {
     if (!id) return;
     void dispatch(fetchBookDetail(id));
   }, [dispatch, id]);
+
+  useEffect(() => {
+    void dispatch(fetchActiveCampaign());
+  }, [dispatch]);
+
+  const flashSaleItemForBook = useMemo(() => {
+    if (!book) return null;
+    return (
+      flashSaleState.items.find(
+        (item) => String(item.book_id) === String(book.id),
+      ) ?? null
+    );
+  }, [book, flashSaleState.items]);
+
+  const displaySellingPrice = flashSaleItemForBook
+    ? flashSaleItemForBook.flash_price
+    : (book?.selling_price ?? 0);
+
+  const displayStock = flashSaleItemForBook
+    ? flashSaleItemForBook.flash_stock
+    : (book?.total_stock ?? 0);
 
   const galleryImages = useMemo(() => {
     if (!book) return [];
@@ -205,7 +228,8 @@ export default function BookDetailPage() {
   };
 
   const handleIncrease = () => {
-    setQuantity((prev) => prev + 1);
+    const maxAllowed = Math.max(1, displayStock);
+    setQuantity((prev) => Math.min(maxAllowed, prev + 1));
   };
 
   const handleAddToCart = (): boolean => {
@@ -223,7 +247,7 @@ export default function BookDetailPage() {
           title: book.title,
           author: book.author_name,
           categoryName: book.category_name,
-          unitPrice: book.selling_price,
+          unitPrice: displaySellingPrice,
           coverSrc: book.cover_image,
         },
         quantity,
@@ -379,21 +403,30 @@ export default function BookDetailPage() {
 
                 <div className="mt-6 flex items-end gap-3">
                   <span className="text-3xl font-bold text-teal-800">
-                    {formatCurrency(book.selling_price)}
+                    {formatCurrency(displaySellingPrice)}
                   </span>
-                  {book.original_price > book.selling_price ? (
+                  {book.original_price > displaySellingPrice ? (
                     <span className="text-lg text-gray-400 line-through">
                       {formatCurrency(book.original_price)}
                     </span>
                   ) : null}
                 </div>
 
+                {flashSaleItemForBook && flashSaleState.activeCampaign ? (
+                  <div className="mt-3 inline-flex rounded-md bg-rose-100 px-3 py-1.5 text-xs font-bold text-rose-700">
+                    Flash sale dang dien ra:{" "}
+                    {flashSaleState.activeCampaign.name}
+                  </div>
+                ) : null}
+
                 <div className="mt-4 text-sm text-gray-500">
                   Đã bán: {book.sold_count} • Đã thuê: {book.rental_count}
                 </div>
 
                 <div className="mt-2 text-sm font-medium text-emerald-700">
-                  Còn lại trong kho: {book.total_stock} cuốn
+                  {flashSaleItemForBook
+                    ? `Con lai flash sale: ${displayStock} cuon`
+                    : `Con lai trong kho: ${displayStock} cuon`}
                 </div>
 
                 <div className="mt-6 border-t border-gray-100 pt-5">
