@@ -69,7 +69,9 @@ export default function FlashSaleConfigModal({
 
   const currentPrice = Number(config.flash_price || 0);
   const discount = book
-    ? Math.round(((book.selling_price - currentPrice) / book.selling_price) * 100)
+    ? Math.round(
+        ((book.selling_price - currentPrice) / book.selling_price) * 100,
+      )
     : 0;
 
   return (
@@ -91,7 +93,12 @@ export default function FlashSaleConfigModal({
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
             <div className="font-semibold text-gray-900">{book.title}</div>
             <div className="mt-1 text-gray-600">
-              Giá hiện tại: {new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(book.selling_price)} • Kho: {book.total_stock}
+              Giá hiện tại:{" "}
+              {new Intl.NumberFormat("vi-VN", {
+                style: "currency",
+                currency: "VND",
+              }).format(book.selling_price)}{" "}
+              • Kho: {book.total_stock}
             </div>
           </div>
         )}

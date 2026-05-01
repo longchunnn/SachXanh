@@ -254,7 +254,11 @@ export default function AdminFlashSaleSelectBooksPage() {
     setIsModalOpen(true);
   };
 
-  const handleModalSubmit = (config: { flash_price: string; flash_stock: string; purchase_limit: string }) => {
+  const handleModalSubmit = (config: {
+    flash_price: string;
+    flash_stock: string;
+    purchase_limit: string;
+  }) => {
     if (!bookToConfig) return;
 
     const current = readDraft();
