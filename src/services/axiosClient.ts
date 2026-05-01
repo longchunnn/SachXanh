@@ -14,7 +14,7 @@ import {
   setClaimedVouchers,
 } from "../features/voucher/voucherSlice";
 
-const DEFAULT_BASE_URL = "http://localhost:8080/api/v1";
+const DEFAULT_BASE_URL = "http://localhost:8081/api/v1";
 const AUTH_TOKEN_KEY = "access_token";
 
 const baseURL =
