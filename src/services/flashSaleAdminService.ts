@@ -1,4 +1,4 @@
-import axiosClient from "./axiosClient";
+import axiosClient, { normalizeAxiosError } from "./axiosClient";
 import { unwrapPagedContent, unwrapResult } from "../utils/apiResponse";
 
 type AnyRecord = Record<string, unknown>;
@@ -31,6 +31,41 @@ export type FlashSaleCampaignItem = {
   purchase_limit: number;
 };
 
+type ListQueryParams = Record<string, string | number>;
+
+const listQueryAttempts: Array<ListQueryParams | undefined> = [
+  { _page: 0, _limit: 200, _sort: "id", _order: "desc" },
+  { _page: 0, _limit: 200 },
+  undefined,
+];
+
+async function getWithListFallback(path: string): Promise<unknown> {
+  let lastError: unknown = new Error("Flash sale list request failed");
+
+  for (const params of listQueryAttempts) {
+    try {
+      if (params) return await axiosClient.get(path, { params });
+      return await axiosClient.get(path);
+    } catch (error) {
+      lastError = error;
+      const status =
+        error && typeof error === "object" && "status" in error
+          ? ((error as { status?: unknown }).status as
+              | number
+              | null
+              | undefined)
+          : null;
+
+      // Retry only for payload/contract mismatches that often vary by backend.
+      if (status !== 400 && status !== 500) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 function normalizeCampaign(raw: unknown): FlashSaleCampaign {
   const campaign = (raw ?? {}) as AnyRecord;
 
@@ -51,28 +86,37 @@ function normalizeCampaignItem(raw: unknown): FlashSaleCampaignItem {
     book_id: asString(item.book_id ?? item.bookId),
     flash_price: asNumber(item.flash_price ?? item.flashPrice),
     flash_stock: asNumber(item.flash_stock ?? item.flashStock),
-    purchase_limit: Math.max(1, asNumber(item.purchase_limit ?? item.purchaseLimit, 1)),
+    purchase_limit: Math.max(
+      1,
+      asNumber(item.purchase_limit ?? item.purchaseLimit, 1),
+    ),
   };
 }
 
 // Suggested endpoints. Adjust on backend if different.
 export async function getCampaigns(): Promise<FlashSaleCampaign[]> {
-  const response = await axiosClient.get("/flash-sale/campaigns", {
-    params: { _page: 0, _limit: 200, _sort: "id", _order: "desc" },
-  });
-  return unwrapPagedContent<unknown>(response).map((entry) => normalizeCampaign(entry));
+  const response = await getWithListFallback("/flash-sale/campaigns");
+  return unwrapPagedContent<unknown>(response).map((entry) =>
+    normalizeCampaign(entry),
+  );
 }
 
-export async function createCampaign(payload: Record<string, unknown>): Promise<FlashSaleCampaign> {
+export async function createCampaign(
+  payload: Record<string, unknown>,
+): Promise<FlashSaleCampaign> {
   const response = await axiosClient.post("/flash-sale/campaigns", payload);
   return normalizeCampaign(unwrapResult(response));
 }
 
-export async function getCampaignItems(campaignId: string): Promise<FlashSaleCampaignItem[]> {
-  const response = await axiosClient.get(`/flash-sale/campaigns/${encodeURIComponent(campaignId)}/items`, {
-    params: { _page: 0, _limit: 200, _sort: "id", _order: "desc" },
-  });
-  return unwrapPagedContent<unknown>(response).map((entry) => normalizeCampaignItem(entry));
+export async function getCampaignItems(
+  campaignId: string,
+): Promise<FlashSaleCampaignItem[]> {
+  const response = await getWithListFallback(
+    `/flash-sale/campaigns/${encodeURIComponent(campaignId)}/items`,
+  );
+  return unwrapPagedContent<unknown>(response).map((entry) =>
+    normalizeCampaignItem(entry),
+  );
 }
 
 export async function addCampaignItem(
@@ -84,4 +128,19 @@ export async function addCampaignItem(
     payload,
   );
   return normalizeCampaignItem(unwrapResult(response));
+}
+
+export async function deleteCampaign(campaignId: string | number): Promise<void> {
+  const safeId = String(campaignId ?? "").trim();
+  if (!safeId) throw new Error("Mã chiến dịch không hợp lệ.");
+
+  try {
+    // Đánh thẳng vào endpoint mà Spring Boot của chúng ta đang chờ
+    await axiosClient.delete(`/flash-sale/campaigns/${encodeURIComponent(safeId)}`);
+  } catch (error) {
+    console.error(`Lỗi khi xóa chiến dịch ${safeId}:`, error);
+    // Bạn có thể quăng cái normalizeAxiosError của bạn ở đây để Component bắt lấy
+    throw normalizeAxiosError(error); 
+  }
+
 }

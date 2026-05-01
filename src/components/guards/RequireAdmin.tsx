@@ -7,16 +7,6 @@ export default function RequireAdmin() {
   const roles = useAppSelector((state) => state.session.roles);
   const location = useLocation();
 
-  // -------------------------------------------------------------
-  // 🚀 HACK MODE: Đổi thành 'true' để code UI không cần đăng nhập
-  // -------------------------------------------------------------
-  const isHackMode = true;
-
-  if (isHackMode) {
-    return <Outlet />; // Cho qua cửa luôn, không hỏi giấy tờ!
-  }
-
-  // --- BÊN DƯỚI LÀ CODE GỐC BẢO VỆ CHẶT CHẼ ---
   if (!token) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }

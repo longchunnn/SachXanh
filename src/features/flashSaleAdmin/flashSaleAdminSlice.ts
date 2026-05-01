@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import {
   addCampaignItem,
   createCampaign,
+  deleteCampaign,
   getCampaignItems,
   getCampaigns,
   type FlashSaleCampaign,
@@ -56,17 +57,20 @@ export const fetchCampaignItems = createAsyncThunk<
   { campaignId: string; items: FlashSaleCampaignItem[] },
   string,
   { rejectValue: string }
->("flashSaleAdmin/fetchCampaignItems", async (campaignId, { rejectWithValue }) => {
-  try {
-    const response = await getCampaignItems(campaignId);
-    return {
-      campaignId,
-      items: Array.isArray(response) ? response : [],
-    };
-  } catch (error) {
-    return rejectWithValue(getErrorMessage(error));
-  }
-});
+>(
+  "flashSaleAdmin/fetchCampaignItems",
+  async (campaignId, { rejectWithValue }) => {
+    try {
+      const response = await getCampaignItems(campaignId);
+      return {
+        campaignId,
+        items: Array.isArray(response) ? response : [],
+      };
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  },
+);
 
 export const addFlashSaleCampaignItem = createAsyncThunk<
   { campaignId: string; item: FlashSaleCampaignItem },
@@ -78,6 +82,22 @@ export const addFlashSaleCampaignItem = createAsyncThunk<
     try {
       const item = await addCampaignItem(campaignId, payload);
       return { campaignId, item };
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  },
+);
+
+export const deleteFlashSaleCampaign = createAsyncThunk<
+  string,
+  string,
+  { rejectValue: string }
+>(
+  "flashSaleAdmin/deleteFlashSaleCampaign",
+  async (campaignId, { rejectWithValue }) => {
+    try {
+      await deleteCampaign(campaignId);
+      return campaignId;
     } catch (error) {
       return rejectWithValue(getErrorMessage(error));
     }
@@ -128,7 +148,8 @@ const flashSaleAdminSlice = createSlice({
       })
       .addCase(fetchCampaignItems.fulfilled, (state, action) => {
         state.loading = false;
-        state.itemsByCampaignId[action.payload.campaignId] = action.payload.items;
+        state.itemsByCampaignId[action.payload.campaignId] =
+          action.payload.items;
       })
       .addCase(fetchCampaignItems.rejected, (state, action) => {
         state.loading = false;
@@ -140,7 +161,8 @@ const flashSaleAdminSlice = createSlice({
       })
       .addCase(addFlashSaleCampaignItem.fulfilled, (state, action) => {
         state.saving = false;
-        const current = state.itemsByCampaignId[action.payload.campaignId] ?? [];
+        const current =
+          state.itemsByCampaignId[action.payload.campaignId] ?? [];
         state.itemsByCampaignId[action.payload.campaignId] = [
           action.payload.item,
           ...current,
@@ -149,6 +171,20 @@ const flashSaleAdminSlice = createSlice({
       .addCase(addFlashSaleCampaignItem.rejected, (state, action) => {
         state.saving = false;
         state.error = action.payload || "Không thêm được sản phẩm.";
+      })
+      .addCase(deleteFlashSaleCampaign.pending, (state) => {
+        state.saving = true;
+        state.error = "";
+      })
+      .addCase(deleteFlashSaleCampaign.fulfilled, (state, action) => {
+        state.saving = false;
+        state.campaigns = state.campaigns.filter(
+          (campaign) => campaign.id !== action.payload,
+        );
+        delete state.itemsByCampaignId[action.payload];
+      })
+      .addCase(deleteFlashSaleCampaign.rejected, (state) => {
+        state.saving = false;
       });
   },
 });

@@ -1,5 +1,6 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { isJwtExpired, parseJwtPayload } from "../../utils/jwt";
+import { normalizeRole } from "../../utils/roles";
 
 export type UserRecord = {
   id: string;
@@ -72,20 +73,18 @@ function getStorageKey(prefix: string, userId: string): string {
   return `${prefix}:${userId}`;
 }
 
-function normalizePrimaryRole(value: unknown): string {
-  const safe = String(value || "").trim().toUpperCase();
-  if (!safe) return "";
-  return safe.startsWith("ROLE_") ? safe.slice(5) : safe;
-}
-
 function normalizeRoles(raw: unknown, primaryRole = ""): string[] {
   const roles = Array.isArray(raw)
-    ? raw.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)
+    ? raw
+        .map((value) => normalizeRole(value))
+        .filter(Boolean)
+        .map((value) => `ROLE_${value}`)
     : [];
 
-  const normalizedPrimaryRole = normalizePrimaryRole(primaryRole);
-  if (normalizedPrimaryRole && !roles.includes(`ROLE_${normalizedPrimaryRole}`)) {
-    roles.push(`ROLE_${normalizedPrimaryRole}`);
+  const normalizedPrimaryRole = normalizeRole(primaryRole);
+  if (normalizedPrimaryRole) {
+    const entry = `ROLE_${normalizedPrimaryRole}`;
+    if (!roles.includes(entry)) roles.push(entry);
   }
 
   return roles;
@@ -151,11 +150,13 @@ function loadInitialSession(): SessionState {
 
   const payload = parseJwtPayload(token);
   const userId = String(payload?.user_id ?? payload?.sub ?? "");
-  const fullName = typeof payload?.full_name === "string" ? payload.full_name : "";
-  const username = typeof payload?.username === "string" ? payload.username : "";
+  const fullName =
+    typeof payload?.full_name === "string" ? payload.full_name : "";
+  const username =
+    typeof payload?.username === "string" ? payload.username : "";
   const email = typeof payload?.email === "string" ? payload.email : "";
   const displayName = fullName || username;
-  const primaryRole = normalizePrimaryRole(payload?.primary_role);
+  const primaryRole = normalizeRole(payload?.primary_role);
   const roles = normalizeRoles(payload?.roles, primaryRole);
   const profileForm = readJson<ProfileForm>(
     getStorageKey("bookstore_profile_form", userId),
@@ -168,7 +169,8 @@ function loadInitialSession(): SessionState {
   const selectedAddressId =
     savedAddresses.find((address) => address.isDefault)?.id ?? null;
   const avatarSrc =
-    localStorage.getItem(getStorageKey("bookstore_profile_avatar", userId)) ?? "";
+    localStorage.getItem(getStorageKey("bookstore_profile_avatar", userId)) ??
+    "";
 
   return {
     token,
@@ -209,8 +211,8 @@ const sessionSlice = createSlice({
         action.payload.selectedAddressId ??
         state.savedAddresses.find((address) => address.isDefault)?.id ??
         null;
-      state.roles = action.payload.roles ?? [];
-      state.primaryRole = normalizePrimaryRole(action.payload.primaryRole);
+      state.primaryRole = normalizeRole(action.payload.primaryRole);
+      state.roles = normalizeRoles(action.payload.roles, state.primaryRole);
     },
     clearSession(state) {
       state.token = null;

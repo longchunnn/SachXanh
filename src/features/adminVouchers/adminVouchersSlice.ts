@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import {
   createVoucher,
+  getVoucherById,
   getVouchers,
   updateVoucherPartial,
   type ApiVoucher,
@@ -61,6 +62,21 @@ export const updateAdminVoucher = createAsyncThunk<
   },
 );
 
+export const fetchAdminVoucherDetail = createAsyncThunk<
+  ApiVoucher | null,
+  string,
+  { rejectValue: string }
+>(
+  "adminVouchers/fetchAdminVoucherDetail",
+  async (voucherId, { rejectWithValue }) => {
+    try {
+      return await getVoucherById(voucherId);
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error));
+    }
+  },
+);
+
 const initialState: AdminVouchersState = {
   items: [],
   loading: false,
@@ -105,12 +121,28 @@ const adminVouchersSlice = createSlice({
       .addCase(updateAdminVoucher.fulfilled, (state, action) => {
         state.saving = false;
         state.items = state.items.map((item) =>
-          item.id === action.payload.id ? action.payload : item,
+          item.promotionId === action.payload.promotionId
+            ? action.payload
+            : item,
         );
       })
       .addCase(updateAdminVoucher.rejected, (state, action) => {
         state.saving = false;
         state.error = action.payload || "Không lưu được mã.";
+      })
+      .addCase(fetchAdminVoucherDetail.fulfilled, (state, action) => {
+        const detail = action.payload;
+        if (!detail) return;
+        const exists = state.items.some(
+          (item) => item.promotionId === detail.promotionId,
+        );
+        state.items = exists
+          ? state.items.map((item) =>
+              item.promotionId === detail.promotionId
+                ? { ...item, ...detail }
+                : item,
+            )
+          : [detail, ...state.items];
       });
   },
 });

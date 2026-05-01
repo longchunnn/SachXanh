@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RightOutlined } from "@ant-design/icons";
 import { Link } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../app/hooks";
 import { fetchCatalog } from "../features/books/booksSlice";
+import { fetchActiveCampaign } from "../features/flashSale/flashSaleSlice";
 
 import { type BookCardData } from "../components/common/BookCard";
 import VoucherCard, {
   type VoucherCardData,
 } from "../components/common/VoucherCard";
+import VoucherListModal, {
+  type DbPromotion,
+} from "../components/common/VoucherListModal";
 
 import HomeBanner from "../components/layouts/HomeBanner";
 import BookSlider from "../components/common/BookSlider";
@@ -31,20 +35,6 @@ type DbBook = {
   rental_count: number;
 };
 
-type DbPromotion = {
-  id: string;
-  title: string;
-  subtitle: string;
-  code: string;
-  discount_percent: number;
-  applies_to_categories?: string[];
-  voucher_type?: "discount" | "freeship";
-  condition_text?: string;
-  valid_from?: string;
-  valid_to?: string;
-  terms?: string;
-};
-
 type DbReview = {
   id: string;
   book_id: string;
@@ -65,16 +55,12 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-function formatDateLabel(dateText?: string): string {
-  if (!dateText) return "Chưa cập nhật";
-  const date = new Date(dateText);
-  if (Number.isNaN(date.getTime())) return "Chưa cập nhật";
-
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
+function toValidFutureTimestamp(value?: string): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return null;
+  if (timestamp < Date.now()) return null;
+  return timestamp;
 }
 
 function toVoucherCardData(promotion: DbPromotion): VoucherCardData {
@@ -156,19 +142,22 @@ export default function HomePage() {
   const claimedVouchers = useAppSelector(
     (state) => state.voucher.claimedVouchers as VoucherWalletItem[],
   );
-  const claimedVoucherIds = useMemo(
-    () => claimedVouchers.map((item) => item.id),
+  const claimedVoucherIdSet = useMemo(
+    () => new Set(claimedVouchers.map((item) => String(item.id))),
     [claimedVouchers],
   );
   const reviews = useAppSelector((state) => state.books.reviews as DbReview[]);
-  const [isVoucherPopupOpen, setIsVoucherPopupOpen] = useState(false);
-  const [selectedVoucher, setSelectedVoucher] = useState<DbPromotion | null>(
-    null,
-  );
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
+  const [hasFlashSaleUiExpired, setHasFlashSaleUiExpired] = useState(false);
 
   useEffect(() => {
     void dispatch(fetchCatalog());
+    void dispatch(fetchActiveCampaign());
   }, [dispatch]);
+
+  const handleFlashSaleExpired = useCallback(() => {
+    setHasFlashSaleUiExpired(true);
+  }, []);
 
   const loading = useAppSelector((state) => state.books.loading);
   const error = useAppSelector((state) => state.books.error);
@@ -206,6 +195,40 @@ export default function HomePage() {
         .slice(0, 6)
         .map((book) => mapBook(book, ratingMap.get(String(book.id)))),
     [books, ratingMap],
+  );
+
+  const flashSaleState = useAppSelector((state) => state.flashSale);
+  const activeCampaign = flashSaleState.activeCampaign;
+
+  useEffect(() => {
+    setHasFlashSaleUiExpired(false);
+  }, [activeCampaign?.id, activeCampaign?.ends_at]);
+
+  const isFlashSaleActive = Boolean(
+    activeCampaign && flashSaleState.items.length && !hasFlashSaleUiExpired,
+  );
+  const flashSaleBooks = useMemo(
+    () =>
+      flashSaleState.items
+        .map((item) => {
+          const book = books.find((b) => String(b.id) === item.book_id);
+          if (!book) return null;
+          return {
+            id: String(book.id),
+            title: book.title,
+            author: book.author_name,
+            categoryName: book.category_name,
+            price: formatCurrency(item.flash_price),
+            unitPrice: item.flash_price,
+            oldPrice: formatCurrency(book.selling_price),
+            coverSrc: book.cover_image,
+            rating: ratingMap.get(String(book.id))?.average,
+            ratingCount: ratingMap.get(String(book.id))?.count,
+            flashMeta: `Con lai ${item.flash_stock} suat • Gioi han ${item.purchase_limit}`,
+          };
+        })
+        .filter(Boolean) as BookCardData[],
+    [flashSaleState.items, books, ratingMap],
   );
 
   const newArrivals = useMemo(
@@ -253,15 +276,38 @@ export default function HomePage() {
     [books, ratingMap],
   );
 
+  const availablePromotions = useMemo(
+    () =>
+      promotions
+        .filter((promotion) => !claimedVoucherIdSet.has(String(promotion.id)))
+        .filter((promotion) => {
+          const futureValidTo = toValidFutureTimestamp(promotion.valid_to);
+          // Keep vouchers without end date, but drop vouchers already expired.
+          return Boolean(futureValidTo) || !promotion.valid_to;
+        })
+        .sort((left, right) => {
+          const leftTime = toValidFutureTimestamp(left.valid_to);
+          const rightTime = toValidFutureTimestamp(right.valid_to);
+
+          if (leftTime !== null && rightTime !== null) {
+            return leftTime - rightTime;
+          }
+          if (leftTime !== null) return -1;
+          if (rightTime !== null) return 1;
+          return String(left.id).localeCompare(String(right.id));
+        }),
+    [claimedVoucherIdSet, promotions],
+  );
+
   const allVouchers: VoucherCardData[] = useMemo(
-    () => promotions.map(toVoucherCardData),
-    [promotions],
+    () => availablePromotions.map(toVoucherCardData),
+    [availablePromotions],
   );
 
   const vouchers = useMemo(() => allVouchers.slice(0, 7), [allVouchers]);
 
   const handleClaimVoucher = (voucher: VoucherCardData) => {
-    if (claimedVoucherIds.includes(voucher.id)) {
+    if (claimedVoucherIdSet.has(String(voucher.id))) {
       return;
     }
 
@@ -280,20 +326,18 @@ export default function HomePage() {
     toast.success("Đã nhận mã giảm giá thành công");
   };
 
-  const handleOpenVoucherDetails = (voucher: VoucherCardData) => {
-    const found = promotions.find((item) => item.id === voucher.id);
-    if (!found) return;
-    setSelectedVoucher(found);
-  };
-
-  const selectedVoucherCard = selectedVoucher
-    ? toVoucherCardData(selectedVoucher)
-    : null;
-
   return (
     <div className="bg-gray-50">
       <Header />
-      <HomeBanner />
+      <HomeBanner
+        flashSaleCampaignName={
+          isFlashSaleActive ? activeCampaign?.name : undefined
+        }
+        flashSaleEndsAt={
+          isFlashSaleActive ? activeCampaign?.ends_at : undefined
+        }
+        onFlashSaleExpired={handleFlashSaleExpired}
+      />
 
       {error ? (
         <div className="mx-auto mt-4 w-full max-w-7xl px-4 md:px-8">
@@ -313,9 +357,13 @@ export default function HomePage() {
 
           {!loading ? (
             <BookSlider
-              title="Sách bán chạy nhất"
-              books={bestSellers}
-              viewAllTo="/search?sort=sold-desc"
+              title={isFlashSaleActive ? "FLASH SALE!!!" : "Sách bán chạy nhất"}
+              books={isFlashSaleActive ? flashSaleBooks : bestSellers}
+              viewAllTo={
+                isFlashSaleActive
+                  ? "/search?flash-sale=active"
+                  : "/search?sort=sold-desc"
+              }
             />
           ) : null}
 
@@ -338,14 +386,14 @@ export default function HomePage() {
           <section className=" p-4 md:p-5 w-full overflow-hidden">
             <SectionHeader
               title="Ưu đãi & Voucher đặc quyền"
-              onClick={() => setIsVoucherPopupOpen(true)}
+              onClick={() => setIsVoucherModalOpen(true)}
             />
             <div className="mt-4 flex overflow-x-auto gap-3 pb-2 custom-scrollbar">
               {vouchers.map((v) => (
                 <VoucherCard
                   key={v.id}
                   data={v}
-                  claimed={claimedVoucherIds.includes(v.id)}
+                  claimed={claimedVoucherIdSet.has(String(v.id))}
                   onClaim={handleClaimVoucher}
                 />
               ))}
@@ -379,151 +427,14 @@ export default function HomePage() {
       </div>
       <Footer />
 
-      {isVoucherPopupOpen ? (
-        <div
-          className="fixed inset-0 z-70 bg-black/45 px-4 py-6 md:py-10"
-          onClick={() => {
-            setSelectedVoucher(null);
-            setIsVoucherPopupOpen(false);
-          }}
-        >
-          <div
-            className="mx-auto flex h-full w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 md:px-6">
-              <h3 className="text-lg font-bold text-teal-800 md:text-xl">
-                Danh sách voucher
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedVoucher(null);
-                  setIsVoucherPopupOpen(false);
-                }}
-                className="rounded-full border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-600 transition-colors hover:border-teal-600 hover:text-teal-700"
-              >
-                Đóng
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 md:p-6">
-              {allVouchers.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-sm text-gray-500">
-                  Hiện chưa có voucher nào.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {allVouchers.map((voucher) => (
-                    <VoucherCard
-                      key={voucher.id}
-                      data={voucher}
-                      claimed={claimedVoucherIds.includes(voucher.id)}
-                      onClaim={handleClaimVoucher}
-                      onOpenDetails={handleOpenVoucherDetails}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {selectedVoucher && selectedVoucherCard ? (
-            <div
-              className="fixed inset-0 z-80 bg-black/45 px-4 py-8"
-              onClick={() => setSelectedVoucher(null)}
-            >
-              <div
-                className="mx-auto w-full max-w-2xl rounded-2xl bg-white p-5 shadow-2xl md:p-6"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-bold text-teal-800 md:text-xl">
-                    Chi tiết voucher
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedVoucher(null)}
-                    className="rounded-full border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-600 transition-colors hover:border-teal-600 hover:text-teal-700"
-                  >
-                    Đóng
-                  </button>
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  <div className="rounded-xl border border-teal-100 bg-teal-50 px-4 py-3">
-                    <div className="text-base font-bold text-teal-800">
-                      {selectedVoucherCard.title}
-                    </div>
-                    <div className="mt-1 text-sm text-teal-700">
-                      {selectedVoucherCard.subtitle}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Mã voucher
-                      </div>
-                      <div className="mt-1 text-sm font-bold text-gray-800">
-                        {selectedVoucher.code}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Mức giảm
-                      </div>
-                      <div className="mt-1 text-sm font-bold text-gray-800">
-                        {selectedVoucher.voucher_type === "freeship"
-                          ? "100% phí vận chuyển"
-                          : `${selectedVoucher.discount_percent}%`}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Hiệu lực từ
-                      </div>
-                      <div className="mt-1 text-sm font-bold text-gray-800">
-                        {formatDateLabel(selectedVoucher.valid_from)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                        Hiệu lực đến
-                      </div>
-                      <div className="mt-1 text-sm font-bold text-gray-800">
-                        {formatDateLabel(selectedVoucher.valid_to)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-gray-100 px-3 py-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Điều kiện áp dụng
-                    </div>
-                    <div className="mt-1 text-sm text-gray-700">
-                      {selectedVoucher.condition_text ||
-                        "Không có điều kiện cụ thể."}
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-gray-100 px-3 py-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Điều khoản
-                    </div>
-                    <div className="mt-1 text-sm text-gray-700">
-                      {selectedVoucher.terms || "Không có điều khoản bổ sung."}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <VoucherListModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        vouchers={allVouchers}
+        allPromotions={availablePromotions}
+        claimedVoucherIdSet={claimedVoucherIdSet}
+        onClaim={handleClaimVoucher}
+      />
     </div>
   );
 }

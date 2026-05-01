@@ -6,6 +6,7 @@ import { fetchAdminBooks } from "../../features/adminBooks/adminBooksSlice";
 import {
   addFlashSaleCampaignItem,
   createFlashSaleCampaign,
+  fetchCampaigns,
 } from "../../features/flashSaleAdmin/flashSaleAdminSlice";
 import type { ApiBook } from "../../utils/apiMappers";
 
@@ -58,14 +59,8 @@ function toIsoWithOffset(date: string, time: string): string | null {
   const local = new Date(`${safeDate}T${safeTime}`);
   if (Number.isNaN(local.getTime())) return null;
 
-  const offsetMinutes = -local.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const abs = Math.abs(offsetMinutes);
-  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
-  const mm = String(abs % 60).padStart(2, "0");
-
   const normalizedTime = safeTime.length === 5 ? `${safeTime}:00` : safeTime;
-  return `${safeDate}T${normalizedTime}${sign}${hh}:${mm}`;
+  return `${safeDate}T${normalizedTime}`;
 }
 
 function formatDateLabel(date: string): string {
@@ -188,7 +183,7 @@ export default function AdminFlashSaleCreatePage() {
 
   const token = useAppSelector((state) => state.session.token);
   const { items: books } = useAppSelector((state) => state.adminBooks);
-  const { saving } = useAppSelector((state) => state.flashSaleAdmin);
+  const { campaigns, saving } = useAppSelector((state) => state.flashSaleAdmin);
 
   const [draft, setDraft] = useState<FlashSaleCreateDraft>(() => {
     const loaded = token ? readDraftFromStorage() : null;
@@ -202,6 +197,7 @@ export default function AdminFlashSaleCreatePage() {
 
   useEffect(() => {
     void dispatch(fetchAdminBooks());
+    void dispatch(fetchCampaigns());
   }, [dispatch]);
 
   const bookById = useMemo(() => {
@@ -333,6 +329,29 @@ export default function AdminFlashSaleCreatePage() {
       return;
     }
 
+    const nextStart = new Date(startIso).getTime();
+    const nextEnd = new Date(endIso).getTime();
+    if (Number.isNaN(nextStart) || Number.isNaN(nextEnd)) {
+      toast.error("Thời gian chiến dịch không hợp lệ.");
+      return;
+    }
+
+    const conflict = campaigns.find((campaign) => {
+      const currentStart = new Date(campaign.starts_at).getTime();
+      const currentEnd = new Date(campaign.ends_at).getTime();
+      if (Number.isNaN(currentStart) || Number.isNaN(currentEnd)) return false;
+
+      // Time ranges overlap if they intersect at any instant.
+      return nextStart < currentEnd && nextEnd > currentStart;
+    });
+
+    if (conflict) {
+      toast.error(
+        `Khung giờ bị trùng với chiến dịch "${conflict.name}". Vui lòng chọn giờ khác.`,
+      );
+      return;
+    }
+
     for (const bookId of draft.selectedBookIds) {
       const book = bookById.get(String(bookId));
       if (!book) {
@@ -376,6 +395,7 @@ export default function AdminFlashSaleCreatePage() {
           name,
           starts_at: startIso,
           ends_at: endIso,
+          status: "UPCOMING",
         }),
       ).unwrap();
 
@@ -394,7 +414,10 @@ export default function AdminFlashSaleCreatePage() {
           addFlashSaleCampaignItem({
             campaignId: created.id,
             payload: {
-              book_id: book.id,
+              book_id: (() => {
+                const numeric = Number(book.id);
+                return Number.isFinite(numeric) ? numeric : book.id;
+              })(),
               flash_price: price,
               flash_stock: stock,
               purchase_limit: limit,
