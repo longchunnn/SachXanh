@@ -127,7 +127,7 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto flex min-h-screen w-full max-w-384">
-        <aside className="hidden w-72 flex-col border-r border-gray-200 bg-white px-4 py-5 lg:flex">
+        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 flex-col border-r border-gray-200 bg-white px-4 py-5 lg:flex overflow-y-auto">
           <Link to="/admin/stats" className="flex items-center gap-3 px-2">
             <img
               src={logoImage}
@@ -192,7 +192,7 @@ export default function AdminLayout() {
           </div>
         </aside>
 
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
             <div className="mx-auto flex w-full max-w-384 items-center gap-4 px-4 py-4 md:px-8">
               <Link
@@ -242,7 +242,7 @@ export default function AdminLayout() {
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-6 md:px-8">
+          <main className="flex-1 min-w-0 overflow-x-auto px-4 py-6 md:px-8">
             <Outlet />
           </main>
         </div>

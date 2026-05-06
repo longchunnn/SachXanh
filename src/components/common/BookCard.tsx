@@ -82,7 +82,9 @@ export default function BookCard({ data, action }: Props) {
   );
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-sm transition-shadow">
+    <div
+      className={`bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-sm transition-shadow ${data.flashMeta ? "bg-gradient-to-b from-white to-teal-100  " : ""}`}
+    >
       <Link to={`/book/${data.id}`}>
         <ImageFrame
           src={data.coverSrc}

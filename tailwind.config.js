@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+import defaultTheme from "tailwindcss/defaultTheme";
+
 export default {
   content: [
     "./index.html",
@@ -7,6 +9,9 @@ export default {
   important: true, // Để Tailwind có thể đè style của Ant Design
   theme: {
     extend: {
+      fontFamily: {
+        mono: ["Roboto Mono", ...defaultTheme.fontFamily.mono],
+      },
       spacing: {
         "13": "3.25rem",
         "112.5": "28.125rem", // 450px

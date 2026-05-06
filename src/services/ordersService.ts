@@ -13,7 +13,9 @@ export async function getOrders(): Promise<ApiOrder[]> {
   const response = await axiosClient.get("/orders", {
     params: { _page: 0, _limit: 100, _sort: "orderId", _order: "desc" },
   });
-  return unwrapPagedContent<unknown>(response).map((entry) => normalizeOrder(entry));
+  return unwrapPagedContent<unknown>(response).map((entry) =>
+    normalizeOrder(entry),
+  );
 }
 
 export async function createOrder(
@@ -37,7 +39,9 @@ export async function getOrdersForStaff(params?: {
       user_id: params?.userId,
     },
   });
-  return unwrapPagedContent<unknown>(response).map((entry) => normalizeOrder(entry));
+  return unwrapPagedContent<unknown>(response).map((entry) =>
+    normalizeOrder(entry),
+  );
 }
 
 export async function updateOrderStatus(
@@ -47,6 +51,14 @@ export async function updateOrderStatus(
   const response = await axiosClient.patch(
     `/orders/${encodeURIComponent(orderId)}`,
     payload,
+  );
+  return normalizeOrder(unwrapResult(response));
+}
+
+export async function cancelOrder(orderId: string): Promise<ApiOrder> {
+  const response = await axiosClient.patch(
+    `/orders/${encodeURIComponent(orderId)}`,
+    { order_status: "Đã huỷ" },
   );
   return normalizeOrder(unwrapResult(response));
 }

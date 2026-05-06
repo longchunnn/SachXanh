@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
-import { CheckOutlined, DeleteOutlined } from "@ant-design/icons";
+import {
+  CheckOutlined,
+  DeleteOutlined,
+  DownOutlined,
+  UpOutlined,
+} from "@ant-design/icons";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Header from "../components/layouts/Header";
 import Footer from "../components/layouts/Footer";
@@ -103,6 +108,8 @@ export default function CartPage() {
     null,
   );
 
+  const [showAllDiscountVouchers, setShowAllDiscountVouchers] = useState(false);
+
   const itemIdSet = useMemo(
     () => new Set(items.map((item) => item.id)),
     [items],
@@ -177,6 +184,33 @@ export default function CartPage() {
       ),
     [discountVouchers, selectedItems, subtotal],
   );
+
+  const discountVoucherOptions = useMemo(() => {
+    const computeDiscount = (voucher: VoucherWalletItem): number => {
+      const eligible = getEligibleSubtotalForVoucher(
+        voucher,
+        selectedItems,
+        subtotal,
+      );
+      if (eligible <= 0) return 0;
+      return Math.min(
+        eligible,
+        Math.round((eligible * voucher.discount_percent) / 100),
+      );
+    };
+
+    return availableDiscountVouchers
+      .map((voucher) => ({
+        voucher,
+        discountAmount: computeDiscount(voucher),
+      }))
+      .sort((a, b) => {
+        if (b.discountAmount !== a.discountAmount) {
+          return b.discountAmount - a.discountAmount;
+        }
+        return a.voucher.code.localeCompare(b.voucher.code);
+      });
+  }, [availableDiscountVouchers, selectedItems, subtotal]);
 
   const availableFreeShipVouchers = useMemo(
     () => freeShipVouchers,
@@ -461,7 +495,24 @@ export default function CartPage() {
                 </p>
               ) : (
                 <div className="mt-2 space-y-2">
-                  {availableDiscountVouchers.map((voucher) => (
+                  {(showAllDiscountVouchers
+                    ? discountVoucherOptions
+                    : (() => {
+                        const top = discountVoucherOptions.slice(0, 5);
+                        if (!effectiveSelectedDiscountId) return top;
+                        if (
+                          top.some(
+                            (item) => item.voucher.id === effectiveSelectedDiscountId,
+                          )
+                        ) {
+                          return top;
+                        }
+                        const selected = discountVoucherOptions.find(
+                          (item) => item.voucher.id === effectiveSelectedDiscountId,
+                        );
+                        return selected ? [...top, selected] : top;
+                      })()
+                  ).map(({ voucher, discountAmount }) => (
                     <label
                       key={voucher.id}
                       className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-xs text-gray-700 hover:bg-white/80"
@@ -473,11 +524,38 @@ export default function CartPage() {
                         onChange={() => setSelectedDiscountId(voucher.id)}
                         className="mt-0.5 h-4 w-4 cursor-pointer accent-rose-600 ring-rose-200 focus:ring-2"
                       />
-                      <span>
-                        <strong>{voucher.code}</strong> - {voucher.title}
+                      <span className="flex w-full items-start justify-between gap-2">
+                        <span className="min-w-0">
+                          <strong>{voucher.code}</strong> - {voucher.title}
+                        </span>
+                        <span className="shrink-0 font-semibold text-rose-700">
+                          -{formatCurrency(discountAmount)}
+                        </span>
                       </span>
                     </label>
                   ))}
+
+                  {discountVoucherOptions.length > 5 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowAllDiscountVouchers((current) => !current)
+                      }
+                      aria-label={
+                        showAllDiscountVouchers
+                          ? "Thu gọn danh sách mã giảm giá"
+                          : "Xem tất cả mã giảm giá"
+                      }
+                      className="mx-auto flex h-7 w-7 items-center justify-center rounded-full border border-rose-200 bg-white/80 text-rose-700 hover:bg-white"
+                    >
+                      {showAllDiscountVouchers ? (
+                        <UpOutlined />
+                      ) : (
+                        <DownOutlined />
+                      )}
+                    </button>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={() => setSelectedDiscountId(null)}

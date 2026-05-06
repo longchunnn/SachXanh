@@ -249,7 +249,6 @@ export default function AdminVouchersPage() {
         }),
       ).unwrap();
 
-      toast.success("Đã lưu mã giảm giá.");
       closeEdit();
     } catch (error_) {
       toast.error(
@@ -293,7 +292,6 @@ export default function AdminVouchersPage() {
         }),
       ).unwrap();
 
-      toast.success("Đã tạo mã giảm giá mới.");
       setIsCreateOpen(false);
       setCreateDraft(getDefaultDraft());
     } catch (error_) {

@@ -52,6 +52,20 @@ function clampNonNegativeInt(value: string, fallback = 0): number {
   return fallback;
 }
 
+function parseDigitsOnly(raw: string): string {
+  return String(raw ?? "").replace(/[^0-9]/g, "");
+}
+
+function formatVnThousands(raw: string): string {
+  const digits = parseDigitsOnly(raw);
+  if (!digits) return "";
+  const numeric = Number(digits);
+  if (!Number.isFinite(numeric)) return "";
+  return new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0,
+  }).format(numeric);
+}
+
 export default function AdminBooksPage() {
   const dispatch = useAppDispatch();
   const location = useLocation();
@@ -253,11 +267,6 @@ export default function AdminBooksPage() {
                 </div>
               </div>
 
-              <div className="text-sm text-gray-500 lg:text-right">
-                ID:{" "}
-                <span className="font-semibold text-gray-700">#{book.id}</span>
-              </div>
-
               <div className="flex justify-start lg:justify-end">
                 <button
                   type="button"
@@ -362,11 +371,11 @@ export default function AdminBooksPage() {
               </div>
               <input
                 inputMode="numeric"
-                value={draft.selling_price}
+                value={formatVnThousands(draft.selling_price)}
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
-                    selling_price: event.target.value,
+                    selling_price: parseDigitsOnly(event.target.value),
                   }))
                 }
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-teal-600"
@@ -378,11 +387,11 @@ export default function AdminBooksPage() {
               </div>
               <input
                 inputMode="numeric"
-                value={draft.original_price}
+                value={formatVnThousands(draft.original_price)}
                 onChange={(event) =>
                   setDraft((current) => ({
                     ...current,
-                    original_price: event.target.value,
+                    original_price: parseDigitsOnly(event.target.value),
                   }))
                 }
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-teal-600"

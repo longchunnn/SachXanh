@@ -43,8 +43,8 @@ export default function HomeBanner({
               : "Bộ sưu tập văn học kinh điển được tái bản với thiết kế bìa nghệ thuật độc quyền chỉ có tại Sách Xanh."}
           </p>
           {isFlashSaleActive && flashSaleEndsAt ? (
-            <div className="inline-flex items-center gap-3 rounded-xl border border-amber-300/60 bg-amber-500/10 px-4 py-3 backdrop-blur-sm">
-              <span className="text-sm font-semibold text-amber-100">
+            <div className="inline-flex items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-sm">
+              <span className="text-base font-semibold text-white/90">
                 Kết thúc sau:
               </span>
               <CountdownTimer

@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { useForm } from "react-hook-form";
 import { clearAccessToken, getAccessToken } from "../services/axiosClient";
 import { getBooks } from "../services/booksService";
-import { getOrdersForStaff } from "../services/ordersService";
+import { getOrdersForStaff, cancelOrder } from "../services/ordersService";
 import { getUserById } from "../services/usersService";
 import { getVouchers } from "../services/vouchersService";
 import Header from "../components/layouts/Header";
@@ -151,6 +151,11 @@ function isDeliveredStatus(orderStatus: string): boolean {
   return String(orderStatus || "")
     .toLowerCase()
     .includes("đã giao");
+}
+
+function isProcessingStatus(orderStatus: string): boolean {
+  const status = String(orderStatus || "").toLowerCase();
+  return status.includes("đang xử lý") || status.includes("dang xu ly");
 }
 
 function sortOrdersForDisplay(orderList: OrderRecord[]): OrderRecord[] {
@@ -979,6 +984,24 @@ export default function AccountPage() {
   const isDeliveredOrder = (orderStatus: string): boolean =>
     isDeliveredStatus(orderStatus);
 
+  const isProcessingOrder = (orderStatus: string): boolean =>
+    isProcessingStatus(orderStatus);
+
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      const updated = await cancelOrder(orderId);
+      setOrders((current) =>
+        current.map((item) => (item.id === orderId ? updated : item)),
+      );
+      toast.success("Đơn hàng đã được huỷ thành công.");
+      window.dispatchEvent(new Event(ORDER_UPDATED_EVENT));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Không thể huỷ đơn hàng.",
+      );
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header hideSearch />
@@ -1265,6 +1288,15 @@ export default function AccountPage() {
                       </div>
 
                       <div className="mb-3 flex justify-end gap-2">
+                        {isProcessingOrder(order.order_status) ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleCancelOrder(order.id)}
+                            className="rounded-md border border-red-600 bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                          >
+                            Huỷ đơn
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="rounded-md border border-amber-700 bg-amber-700 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-800"
